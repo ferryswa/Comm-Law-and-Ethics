@@ -1,0 +1,237 @@
+// Repositori hukum. Status verifikasi dicek pada 7 November 2026.
+// - 'verified'  : metadata dan tautan dicek langsung pada situs resmi (JDIH BPK, mkri.id, dewanpers.or.id).
+// - 'partial'   : nomor/isi terkonfirmasi lewat rujukan resmi atau media kredibel, tetapi naskah lengkap/tautan dokumen belum dibaca langsung.
+// - 'unverified': hanya ditemukan di basis data pihak ketiga. Jangan dikutip sebelum dicek ke sumber resmi.
+
+export const CHECKED_ON = '7 November 2026';
+
+export const CATEGORIES = [
+  { id: 'uu', label: 'Undang-Undang' },
+  { id: 'etik', label: 'Kode Etik & Pedoman' },
+  { id: 'mk', label: 'Putusan MK' },
+];
+
+export const TOPICS = [
+  { id: 'pers', label: 'Pers' },
+  { id: 'digital', label: 'ITE / Digital' },
+  { id: 'etika', label: 'Etika' },
+];
+
+export const STATUS = {
+  verified: { label: 'Terverifikasi', tone: 'good' },
+  partial: { label: 'Sebagian terverifikasi', tone: 'warn' },
+  unverified: { label: 'Belum diverifikasi', tone: 'bad' },
+};
+
+export const DOCS = [
+  {
+    id: 'uu-40-1999',
+    short: 'UU 40/1999',
+    title: 'Undang-Undang Nomor 40 Tahun 1999 tentang Pers',
+    category: 'uu',
+    topics: ['pers'],
+    date: '23 September 1999',
+    year: 1999,
+    description:
+      'Dasar hukum kemerdekaan pers: menjamin pers bebas dari sensor dan pembredelan, mewajibkan pelayanan Hak Jawab dan Hak Koreksi, membentuk Dewan Pers yang independen, dan mengatur ketentuan pidana.',
+    keyPoints: ['Pasal 4: kemerdekaan pers, Hak Tolak', 'Pasal 5: Hak Jawab dan Hak Koreksi', 'Pasal 8: perlindungan hukum wartawan', 'Pasal 15: Dewan Pers', 'Pasal 18: ketentuan pidana'],
+    source: 'JDIH BPK RI (peraturan.bpk.go.id) · LN 1999/166, TLN 3887',
+    url: 'https://peraturan.bpk.go.id/Details/45370/uu-no-40-tahun-1999',
+    status: 'verified',
+    note: 'Metadata (tanggal, LN/TLN, status Berlaku) dicek pada JDIH BPK.',
+  },
+  {
+    id: 'uu-11-2008',
+    short: 'UU 11/2008',
+    title: 'Undang-Undang Nomor 11 Tahun 2008 tentang Informasi dan Transaksi Elektronik',
+    category: 'uu',
+    topics: ['digital'],
+    date: '21 April 2008',
+    year: 2008,
+    description:
+      'UU ITE awal yang mengatur informasi dan dokumen elektronik, transaksi elektronik, perbuatan yang dilarang, dan ketentuan pidana, termasuk Pasal 27 ayat (3) tentang penghinaan/pencemaran nama baik.',
+    keyPoints: ['Pasal 27 ayat (3): muatan penghinaan/pencemaran nama baik', 'Pasal 28: berita bohong dan ujaran kebencian', 'Diubah dengan UU 19/2016 dan UU 1/2024'],
+    source: 'JDIH BPK RI (peraturan.bpk.go.id) · LN 2008/58, TLN 4843',
+    url: 'https://peraturan.bpk.go.id/Details/37589/uu-no-11-tahun-2008',
+    status: 'verified',
+    note: 'Tanggal penetapan dan riwayat perubahan dicek pada JDIH BPK.',
+  },
+  {
+    id: 'uu-19-2016',
+    short: 'UU 19/2016',
+    title: 'Undang-Undang Nomor 19 Tahun 2016 tentang Perubahan atas UU Nomor 11 Tahun 2008 tentang ITE',
+    category: 'uu',
+    topics: ['digital'],
+    date: '25 November 2016',
+    year: 2016,
+    description:
+      'Perubahan pertama UU ITE. Menegaskan rujukan Pasal 27 ayat (3) pada ketentuan penghinaan dalam KUHP dan menurunkan ancaman pidananya, serta menambah kewajiban penghapusan informasi elektronik yang tidak relevan berdasarkan penetapan pengadilan.',
+    keyPoints: ['Penjelasan Pasal 27 ayat (3): merujuk KUHP', 'Pasal 26: penghapusan informasi tidak relevan', 'Pasal 45 ayat (3): ancaman pidana penghinaan'],
+    source: 'JDIH BPK RI (peraturan.bpk.go.id) · LN 2016/251, TLN 5952',
+    url: 'https://peraturan.bpk.go.id/Details/37582/uu-no-19-tahun-2016',
+    status: 'verified',
+    note: 'Tanggal penetapan dan LN/TLN dicek pada JDIH BPK.',
+  },
+  {
+    id: 'uu-1-2024',
+    short: 'UU 1/2024',
+    title: 'Undang-Undang Nomor 1 Tahun 2024 tentang Perubahan Kedua atas UU Nomor 11 Tahun 2008 tentang ITE',
+    category: 'uu',
+    topics: ['digital'],
+    date: '2 Januari 2024',
+    year: 2024,
+    description:
+      'Perubahan kedua UU ITE. Mengganti rumusan penghinaan dengan Pasal 27A (penyerangan kehormatan atau nama baik) dan Pasal 27B, serta merumuskan ulang Pasal 28 tentang ujaran kebencian dan pemberitahuan bohong yang menimbulkan kerusuhan.',
+    keyPoints: ['Pasal 27A jo. 45 ayat (4): penyerangan kehormatan', 'Pasal 28 ayat (3) jo. 45A ayat (3): pemberitahuan bohong', 'Telah diuji MK: Putusan 105 dan 115/PUU-XXII/2024'],
+    source: 'JDIH BPK RI (peraturan.bpk.go.id) · LN 2024/1, TLN 6905',
+    url: 'https://peraturan.bpk.go.id/Details/274494/uu-no-1-tahun-2024',
+    status: 'verified',
+    note: 'Metadata dan daftar uji materi dicek pada JDIH BPK.',
+  },
+  {
+    id: 'kej-2008',
+    short: 'KEJ',
+    title: 'Kode Etik Jurnalistik (Peraturan Dewan Pers No. 6/Peraturan-DP/V/2008)',
+    category: 'etik',
+    topics: ['etika', 'pers'],
+    date: 'Disahkan 2008 (SK Dewan Pers No. 03/SK-DP/III/2006)',
+    year: 2008,
+    description:
+      'Sebelas pasal etika wartawan Indonesia: independensi dan akurasi, cara profesional, uji informasi, larangan berita bohong dan fitnah, perlindungan identitas korban susila dan anak, larangan suap, Hak Tolak, ralat, serta pelayanan Hak Jawab.',
+    keyPoints: ['Pasal 1: independen, akurat, berimbang', 'Pasal 3: uji informasi, praduga tak bersalah', 'Pasal 5: identitas korban susila dan anak', 'Pasal 10–11: ralat dan Hak Jawab'],
+    source: 'Dewan Pers (dewanpers.or.id)',
+    url: 'https://dewanpers.or.id/',
+    status: 'partial',
+    note: 'Nomor peraturan terkonfirmasi dari konsiderans Peraturan Dewan Pers No. 03/Peraturan-DP/IV/2024. Tautan menuju beranda resmi; tautan langsung ke naskah KEJ belum dicek.',
+  },
+  {
+    id: 'ppms-2012',
+    short: 'PPMS',
+    title: 'Pedoman Pemberitaan Media Siber (Peraturan Dewan Pers No. 1/Peraturan-DP/III/2012)',
+    category: 'etik',
+    topics: ['etika', 'digital'],
+    date: '3 Februari 2012 (ditetapkan sebagai Peraturan 26 Maret 2012)',
+    year: 2012,
+    description:
+      'Pedoman khusus media siber: verifikasi dan keberimbangan, Isi Buatan Pengguna, ralat dan Hak Jawab yang ditautkan, pencabutan berita, pembedaan iklan, dan penyelesaian sengketa oleh Dewan Pers.',
+    keyPoints: ['Butir 2: verifikasi dan pengecualiannya', 'Butir 3: Isi Buatan Pengguna, 2 x 24 jam', 'Butir 4: ralat, koreksi, Hak Jawab ditautkan', 'Butir 5: pencabutan berita'],
+    source: 'Dewan Pers (dewanpers.or.id)',
+    url: 'https://dewanpers.or.id/',
+    status: 'partial',
+    note: 'Nomor peraturan terkonfirmasi dari konsiderans Peraturan Dewan Pers No. 03/Peraturan-DP/IV/2024; isi butir dicocokkan dengan salinan yang dimuat media. Tautan langsung ke PDF naskah belum dicek.',
+  },
+  {
+    id: 'dp-3-2024',
+    short: 'Perdewan 3/2024',
+    title: 'Peraturan Dewan Pers No. 03/Peraturan-DP/IV/2024 tentang Pedoman Perilaku dan Standar Pers Profesional',
+    category: 'etik',
+    topics: ['etika', 'pers'],
+    date: '29 April 2024',
+    year: 2024,
+    description:
+      'Pedoman perilaku bagi wartawan dan perusahaan pers profesional, termasuk kewajiban menaati UU Pers, KEJ, dan peraturan Dewan Pers serta memisahkan bidang redaksi dan bisnis.',
+    keyPoints: ['Kewajiban wartawan profesional', 'Pemisahan redaksi dan bisnis', 'Merujuk KEJ 2008 dan PPMS 2012'],
+    source: 'Dewan Pers (dewanpers.or.id)',
+    url: 'https://dewanpers.or.id/assets/documents/peraturan/2406190559_3-Peraturan_DP_Pedoman_Perilaku_dan_Standar_Pers_Profesional.pdf',
+    status: 'verified',
+    note: 'Naskah PDF dicek pada situs resmi Dewan Pers.',
+  },
+  {
+    id: 'mk-50-2008',
+    short: 'MK 50/PUU-VI/2008',
+    title: 'Putusan MK Nomor 50/PUU-VI/2008 — Pengujian UU ITE (Pasal 27 ayat (3))',
+    category: 'mk',
+    topics: ['digital'],
+    date: '5 Mei 2009',
+    year: 2009,
+    description:
+      'Permohonan ditolak. MK menyatakan Pasal 27 ayat (3) UU ITE konstitusional dan menegaskan penafsirannya tidak dapat dilepaskan dari Pasal 310 dan 311 KUHP sebagai delik aduan.',
+    keyPoints: ['Amar: menolak permohonan', 'Tafsir merujuk Pasal 310 dan 311 KUHP'],
+    source: 'Mahkamah Konstitusi (mkri.id) · Majalah Konstitusi Edisi Mei 2009',
+    url: 'https://mkri.id/public/content/infoumum/majalahkonstitusi/pdf/BMK%20Edisi%20Mei%202009.pdf',
+    status: 'partial',
+    note: 'Amar dan tanggal terkonfirmasi dari publikasi MK dan media hukum. Naskah putusan lengkap belum dibaca langsung.',
+  },
+  {
+    id: 'mk-78-2023',
+    short: 'MK 78/PUU-XXI/2023',
+    title: 'Putusan MK Nomor 78/PUU-XXI/2023 — Pasal berita bohong (UU 1/1946) dan pencemaran nama baik',
+    category: 'mk',
+    topics: ['digital', 'pers'],
+    date: '21 Maret 2024',
+    year: 2024,
+    description:
+      'Dikabulkan sebagian. Pasal 14 dan 15 UU 1/1946 dinyatakan bertentangan dengan UUD 1945 dan tidak berkekuatan hukum mengikat; Pasal 310 ayat (1) KUHP inkonstitusional bersyarat; permohonan atas Pasal 27 ayat (3) jo. 45 ayat (3) UU ITE ditolak.',
+    keyPoints: ['Pemohon antara lain Haris Azhar, Fatia Maulidiyanti, YLBHI, AJI', 'Pasal 14 dan 15 UU 1/1946 dibatalkan'],
+    source: 'Mahkamah Konstitusi (mkri.id) · naskah putusan',
+    url: 'https://mkri.id/public/content/persidangan/putusan/putusan_mkri_9709_1711005671.pdf',
+    status: 'verified',
+    note: 'Naskah putusan tersedia di mkri.id; amar dicocokkan dengan JDIH Komdigi.',
+  },
+  {
+    id: 'mk-105-2024',
+    short: 'MK 105/PUU-XXII/2024',
+    title: 'Putusan MK Nomor 105/PUU-XXII/2024 — Makna "orang lain" dalam Pasal 27A UU ITE',
+    category: 'mk',
+    topics: ['digital'],
+    date: '29 April 2025',
+    year: 2025,
+    description:
+      'Dikabulkan sebagian. Frasa "orang lain" dalam Pasal 27A dan Pasal 45 ayat (4) UU 1/2024 inkonstitusional bersyarat sepanjang tidak dimaknai kecuali lembaga pemerintah, sekelompok orang dengan identitas spesifik atau tertentu, institusi, korporasi, profesi, atau jabatan.',
+    keyPoints: ['Pemohon: Daniel Frits Maurits Tangkilisan', 'Frasa "suatu hal" juga diberi pemaknaan bersyarat'],
+    source: 'Mahkamah Konstitusi (mkri.id) · berita sidang pengucapan putusan',
+    url: 'https://www.mkri.id/berita/mk-mempertegas-pemaknaan-unsur-unsur-pencemaran-nama-baik-dalam-uu-ite--23133',
+    status: 'verified',
+    note: 'Amar dikutip dari rilis resmi MK dan dicocokkan dengan JDIH BPK.',
+  },
+  {
+    id: 'mk-115-2024',
+    short: 'MK 115/PUU-XXII/2024',
+    title: 'Putusan MK Nomor 115/PUU-XXII/2024 — Makna "kerusuhan" dalam Pasal 28 ayat (3) UU ITE',
+    category: 'mk',
+    topics: ['digital'],
+    date: '29 April 2025',
+    year: 2025,
+    description:
+      'Dikabulkan sebagian. Kata "kerusuhan" dalam Pasal 28 ayat (3) dan Pasal 45A ayat (3) UU 1/2024 dimaknai sebagai kondisi yang mengganggu ketertiban umum di ruang fisik, bukan kondisi di ruang digital/siber.',
+    keyPoints: ['Pemohon: Jovi Andrea Bachtiar', 'Keributan di media sosial bukan "kerusuhan"'],
+    source: 'Mahkamah Konstitusi (mkri.id) · berita sidang pengucapan putusan',
+    url: 'https://www.mkri.id/berita/-23135',
+    status: 'verified',
+    note: 'Amar dikutip dari rilis resmi MK.',
+  },
+  {
+    id: 'mk-145-2025',
+    short: 'MK 145/PUU-XXIII/2025',
+    title: 'Putusan MK Nomor 145/PUU-XXIII/2025 — Tafsir "perlindungan hukum" wartawan (Pasal 8 UU Pers)',
+    category: 'mk',
+    topics: ['pers'],
+    date: '19 Januari 2026',
+    year: 2026,
+    description:
+      'Dikabulkan sebagian atas permohonan Ikatan Wartawan Hukum (IWAKUM). Sanksi pidana dan/atau perdata terhadap wartawan baru dapat diterapkan setelah Hak Jawab, Hak Koreksi, dan dugaan pelanggaran kode etik diselesaikan melalui Dewan Pers, sebagai pendekatan keadilan restoratif.',
+    keyPoints: ['Tiga hakim berpendapat berbeda (dissenting)', 'Mekanisme Dewan Pers ditempuh lebih dulu'],
+    source: 'Mahkamah Konstitusi (mkri.id) · berita putusan; ringkasan amar dari Hukumonline',
+    url: 'https://www.mkri.id/berita/mk:-pemberian-perlindungan-hukum-kepada-wartawan-merupakan-instrumen-konstitusional-24387',
+    status: 'partial',
+    note: 'Rumusan amar di sini adalah ringkasan laporan media hukum. Baca naskah putusan di mkri.id sebelum mengutip kata per kata.',
+  },
+  {
+    id: 'mk-192-2025',
+    short: 'MK 192/PUU-XXIII/2025',
+    title: 'Putusan MK Nomor 192/PUU-XXIII/2025 — Pengujian Pasal 8 UU Pers',
+    category: 'mk',
+    topics: ['pers'],
+    date: 'Belum dikonfirmasi',
+    year: 2025,
+    description:
+      'Tercatat di basis data pihak ketiga sebagai pengujian Pasal 8 UU Pers dengan amar ditolak. Detail, tanggal, dan hubungannya dengan Putusan 145/PUU-XXIII/2025 belum dicek ke sumber resmi.',
+    keyPoints: ['Jangan dikutip sebelum dicek ke mkri.id'],
+    source: 'pasal.id (basis data pihak ketiga)',
+    url: 'https://pasal.id/peraturan/putusan-mk/puu-mk-192-2025',
+    status: 'unverified',
+    note: 'Hanya ditemukan di basis data pihak ketiga. Konfirmasi ke mkri.id sebelum digunakan.',
+  },
+];
+
+export const docById = (id) => DOCS.find((d) => d.id === id);

@@ -1,0 +1,24 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Layout idea: fixed navy sidebar + light header strip, white work surface, red used only for progress & key actions */
+:root {
+  --navy: #17243b;
+  --red: #d71920;
+  --white: #ffffff;
+  --paper: #f4f5f7;
+  --ink: #141c2b;
+  --muted: #5b6577;
+  color-scheme: light;
+}
+html, body, #root { height: 100%; }
+body { background: var(--paper); color: var(--ink); -webkit-font-smoothing: antialiased; }
+h1, h2, h3 { text-wrap: balance; }
+.tabular { font-variant-numeric: tabular-nums; }
+:focus-visible { outline: 2px solid var(--red); outline-offset: 2px; border-radius: 6px; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { transition: none !important; animation: none !important; }
+}
+.scroll-thin::-webkit-scrollbar { width: 8px; height: 8px; }
+.scroll-thin::-webkit-scrollbar-thumb { background: #c8d1e0; border-radius: 8px; }
