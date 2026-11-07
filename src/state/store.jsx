@@ -1,11 +1,18 @@
 import React, { createContext, useContext, useEffect, useMemo, useReducer } from 'react';
-import { LESSONS, COMPETENCIES, TOTAL_MINUTES } from '../data/lessons.js';
+import { LESSONS, COMPETENCIES } from '../data/lessons.js';
 import { QUESTIONS, SAMPLE_ATTEMPT_ANSWERS, scoreAnswers, PASSING_PCT } from '../data/quiz.js';
 import { ESSAYS, SAMPLE_ESSAY_TEXT, MIN_WORDS } from '../data/essays.js';
+import { DOCS } from '../data/legal.js';
 
-const STORAGE_KEY = 'kompas-hub-demo-v2';
+const KEYS = { progress: 'kompas-hub-progress-v3', content: 'kompas-hub-content-v1', session: 'kompas-hub-session-v1' };
 const QUIZ_MINUTES = 15;
 const ESSAY_MINUTES = 20;
+
+// Demo accounts (client-side only, not real authentication)
+export const USERS = [
+  { username: 'admin', password: 'admin', name: 'Administrator', role: 'admin', title: 'LMS Administrator' },
+  { username: 'learner', password: 'learner', name: 'Demo Learner', role: 'learner', title: 'Digital Desk Reporter' },
+];
 
 const dayKey = (d) => {
   const x = new Date(d);
@@ -17,14 +24,25 @@ const daysAgo = (n) => {
   d.setHours(10, 0, 0, 0);
   return d.toISOString();
 };
-
+export const uid = (prefix) => `${prefix}-${Date.now().toString(36)}${Math.random().toString(36).slice(2, 6)}`;
 export const wordCount = (t) => (t.trim() ? t.trim().split(/\s+/).length : 0);
+const snapshotQuestions = (qs) => qs.map(({ id, comp, q, options, answer, why, ref }) => ({ id, comp, q, options, answer, why, ref }));
 
-function seedState() {
-  const sampleScore = scoreAnswers(SAMPLE_ATTEMPT_ANSWERS);
+// ---------------- Seeds ----------------
+export function seedContent() {
   return {
-    version: 2,
-    learner: { name: 'Demo Learner', role: 'Digital Desk Reporter' },
+    version: 1,
+    lessons: LESSONS.map(({ no, ...l }) => ({ ...l, video: null })),
+    questions: QUESTIONS.map((q) => ({ ...q })),
+    docs: DOCS.map((d) => ({ ...d, file: null })),
+    settings: { passingPct: PASSING_PCT },
+  };
+}
+
+function seedProgress() {
+  const sampleScore = scoreAnswers(SAMPLE_ATTEMPT_ANSWERS, QUESTIONS, PASSING_PCT);
+  return {
+    version: 3,
     lessons: {
       l1: { watched: 15 * 60, completed: true, chapter: 3 },
       l2: { watched: 20 * 60, completed: true, chapter: 3 },
@@ -35,7 +53,7 @@ function seedState() {
       draft: {},
       current: 0,
       attempts: [
-        { id: 'seed-1', at: daysAgo(2), answers: SAMPLE_ATTEMPT_ANSWERS, ...sampleScore, sample: true },
+        { id: 'seed-1', at: daysAgo(2), answers: SAMPLE_ATTEMPT_ANSWERS, questions: snapshotQuestions(QUESTIONS), ...sampleScore, sample: true },
       ],
     },
     essays: {
@@ -51,7 +69,6 @@ function seedState() {
       e2: { text: SAMPLE_ESSAY_TEXT.e2, status: 'pending', submittedAt: daysAgo(1), sample: true },
       e3: { text: '', status: 'draft' },
     },
-    // Learning-minute log (basis for learning hours and the activity chart)
     activity: [
       { at: daysAgo(6), minutes: 15, label: 'Video 01 completed', sample: true },
       { at: daysAgo(5), minutes: 20, label: 'Video 02 completed', sample: true },
@@ -65,55 +82,83 @@ function seedState() {
   };
 }
 
-function load() {
+function read(key, check) {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(key);
     if (raw) {
-      const parsed = JSON.parse(raw);
-      if (parsed && parsed.version === 2) return parsed;
+      const v = JSON.parse(raw);
+      if (check(v)) return v;
     }
   } catch {
-    /* storage unavailable: run in memory */
+    /* storage unavailable */
   }
-  return seedState();
+  return null;
+}
+function write(key, value) {
+  try {
+    if (value === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    /* ignore */
+  }
+}
+
+function load() {
+  return {
+    session: read(KEYS.session, (v) => v && v.username),
+    content: read(KEYS.content, (v) => v && v.version === 1) || seedContent(),
+    ...(read(KEYS.progress, (v) => v && v.version === 3) || seedProgress()),
+  };
 }
 
 function logActivity(state, minutes, label) {
   if (minutes <= 0) return state.activity;
   const today = dayKey(new Date());
   const last = state.activity[state.activity.length - 1];
-  // gabungkan menit video berturut-turut pada hari & label yang sama
   if (last && !last.sample && dayKey(last.at) === today && last.label === label) {
     return [...state.activity.slice(0, -1), { ...last, minutes: last.minutes + minutes }];
   }
   return [...state.activity, { at: new Date().toISOString(), minutes, label }];
 }
 
+const lessonProgress = (state, id) => state.lessons[id] || { watched: 0, completed: false, chapter: 0 };
+const upsert = (list, item) => (list.some((x) => x.id === item.id) ? list.map((x) => (x.id === item.id ? item : x)) : [...list, item]);
+const setContent = (state, patch) => ({ ...state, content: { ...state.content, ...patch } });
+
 function reducer(state, action) {
   switch (action.type) {
+    // ---- session ----
+    case 'session/login':
+      return { ...state, session: action.session };
+    case 'session/logout':
+      return { ...state, session: null };
+
+    // ---- learner progress ----
     case 'video/progress': {
-      const { id, position } = action; // seconds
-      const lesson = LESSONS.find((l) => l.id === id);
+      const lesson = state.content.lessons.find((l) => l.id === action.id);
+      if (!lesson) return state;
       const total = lesson.minutes * 60;
-      const prev = state.lessons[id];
-      const watched = Math.min(total, Math.max(prev.watched, position));
-      const gainedSec = watched - prev.watched;
+      const prev = lessonProgress(state, action.id);
+      const watched = Math.min(total, Math.max(prev.watched, action.position));
       const completed = prev.completed || watched >= total * 0.95;
-      const chapter = lesson.chapters.reduce((acc, c, i) => (position >= c.t ? i : acc), 0);
+      const chapter = lesson.chapters.reduce((acc, c, i) => (action.position >= c.t ? i : acc), 0);
+      const idx = state.content.lessons.indexOf(lesson);
       return {
         ...state,
-        lessons: { ...state.lessons, [id]: { watched: completed ? Math.max(watched, prev.watched) : watched, completed, chapter } },
-        activity: logActivity(state, gainedSec / 60, `Watched video ${lesson.no}`),
+        lessons: { ...state.lessons, [action.id]: { watched, completed, chapter } },
+        activity: logActivity(state, (watched - prev.watched) / 60, `Watched video ${String(idx + 1).padStart(2, '0')}`),
       };
     }
     case 'video/complete': {
-      const lesson = LESSONS.find((l) => l.id === action.id);
+      const lesson = state.content.lessons.find((l) => l.id === action.id);
+      if (!lesson) return state;
       const total = lesson.minutes * 60;
-      const prev = state.lessons[action.id];
+      const prev = lessonProgress(state, action.id);
+      const idx = state.content.lessons.indexOf(lesson);
       return {
         ...state,
         lessons: { ...state.lessons, [action.id]: { ...prev, watched: total, completed: true } },
-        activity: logActivity(state, (total - prev.watched) / 60, `Watched video ${lesson.no}`),
+        activity: logActivity(state, Math.max(0, total - prev.watched) / 60, `Watched video ${String(idx + 1).padStart(2, '0')}`),
       };
     }
     case 'quiz/answer':
@@ -121,8 +166,9 @@ function reducer(state, action) {
     case 'quiz/goto':
       return { ...state, quiz: { ...state.quiz, current: action.index } };
     case 'quiz/submit': {
-      const result = scoreAnswers(state.quiz.draft);
-      const attempt = { id: `a-${Date.now()}`, at: new Date().toISOString(), answers: state.quiz.draft, ...result };
+      const qs = state.content.questions;
+      const result = scoreAnswers(state.quiz.draft, qs, state.content.settings.passingPct);
+      const attempt = { id: uid('a'), at: new Date().toISOString(), answers: state.quiz.draft, questions: snapshotQuestions(qs), ...result };
       return {
         ...state,
         quiz: { draft: {}, current: 0, attempts: [...state.quiz.attempts, attempt] },
@@ -131,11 +177,7 @@ function reducer(state, action) {
     }
     case 'essay/edit': {
       const prev = state.essays[action.id];
-      // Mengedit esai yang sudah dikirim/disetujui mengembalikannya ke draf (perlu dikirim ulang)
-      return {
-        ...state,
-        essays: { ...state.essays, [action.id]: { text: action.text, status: 'draft', revisedFrom: prev.status !== 'draft' ? prev.status : prev.revisedFrom } },
-      };
+      return { ...state, essays: { ...state.essays, [action.id]: { text: action.text, status: 'draft', revisedFrom: prev.status !== 'draft' ? prev.status : prev.revisedFrom } } };
     }
     case 'essay/submit': {
       const prev = state.essays[action.id];
@@ -149,10 +191,7 @@ function reducer(state, action) {
       const prev = state.essays[action.id];
       return {
         ...state,
-        essays: {
-          ...state.essays,
-          [action.id]: { ...prev, status: action.decision, reviewedAt: new Date().toISOString(), reviewer: 'Simulated reviewer (demo)', note: action.note },
-        },
+        essays: { ...state.essays, [action.id]: { ...prev, status: action.decision, reviewedAt: new Date().toISOString(), reviewer: action.reviewer, note: action.note } },
       };
     }
     case 'ui/repoQuery':
@@ -160,27 +199,69 @@ function reducer(state, action) {
     case 'ui/lesson':
       return { ...state, ui: { ...state.ui, lesson: action.id } };
     case 'reset':
-      return seedState();
+      return { ...state, ...seedProgress() };
+
+    // ---- admin content ----
+    case 'content/lesson/save':
+      return setContent(state, { lessons: upsert(state.content.lessons, action.lesson) });
+    case 'content/lesson/delete':
+      return setContent(state, { lessons: state.content.lessons.filter((l) => l.id !== action.id) });
+    case 'content/lesson/move': {
+      const list = [...state.content.lessons];
+      const i = list.findIndex((l) => l.id === action.id);
+      const j = i + action.dir;
+      if (i < 0 || j < 0 || j >= list.length) return state;
+      [list[i], list[j]] = [list[j], list[i]];
+      return setContent(state, { lessons: list });
+    }
+    case 'content/doc/save':
+      return setContent(state, { docs: upsert(state.content.docs, action.doc) });
+    case 'content/doc/file':
+      return setContent(state, { docs: state.content.docs.map((d) => (d.id === action.id ? { ...d, file: action.file } : d)) });
+    case 'content/doc/delete':
+      return setContent(state, {
+        docs: state.content.docs.filter((d) => d.id !== action.id),
+        lessons: state.content.lessons.map((l) => ({ ...l, refs: l.refs.filter((r) => r !== action.id) })),
+        questions: state.content.questions.map((q) => (q.ref === action.id ? { ...q, ref: '' } : q)),
+      });
+    case 'content/question/save':
+      return setContent(state, { questions: upsert(state.content.questions, action.question) });
+    case 'content/question/delete':
+      return setContent(state, { questions: state.content.questions.filter((q) => q.id !== action.id) });
+    case 'content/settings':
+      return setContent(state, { settings: { ...state.content.settings, ...action.settings } });
+    case 'content/reset':
+      return { ...state, content: seedContent() };
     default:
       return state;
   }
 }
 
-// ---------- Selectors: satu sumber kebenaran untuk semua modul ----------
+// ---------- Selectors: single source of truth for every module ----------
 export function derive(state) {
-  const lessonRows = LESSONS.map((l) => {
-    const s = state.lessons[l.id];
-    const total = l.minutes * 60;
-    const pct = Math.round((Math.min(s.watched, total) / total) * 100);
-    return { ...l, ...s, pct };
+  const { content } = state;
+  const passingPct = content.settings.passingPct;
+  const docMap = Object.fromEntries(content.docs.map((d) => [d.id, d]));
+
+  const lessonRows = content.lessons.map((l, i) => {
+    const s = lessonProgress(state, l.id);
+    const total = Math.max(1, l.minutes * 60);
+    const watched = Math.min(s.watched, total);
+    const chapter = Math.min(s.chapter || 0, Math.max(0, l.chapters.length - 1));
+    return { ...l, ...s, watched, chapter, no: String(i + 1).padStart(2, '0'), pct: Math.round((watched / total) * 100) };
   });
-  const watchedMin = lessonRows.reduce((acc, l) => acc + Math.min(l.watched, l.minutes * 60) / 60, 0);
-  const completionPct = Math.round((watchedMin / TOTAL_MINUTES) * 100);
+  const lessonCount = lessonRows.length;
+  const totalMinutes = lessonRows.reduce((a, l) => a + l.minutes, 0);
+  const watchedMin = lessonRows.reduce((a, l) => a + l.watched / 60, 0);
+  const completionPct = totalMinutes ? Math.round((watchedMin / totalMinutes) * 100) : 0;
   const modulesDone = lessonRows.filter((l) => l.completed).length;
 
   const attempts = state.quiz.attempts;
   const latest = attempts[attempts.length - 1] || null;
   const best = attempts.reduce((b, a) => (!b || a.pct > b.pct ? a : b), null);
+  const quizPassed = !!best && best.pct >= passingPct;
+  const questionCount = content.questions.length;
+  const minCorrect = Math.ceil((questionCount * passingPct) / 100);
 
   const minutesTotal = state.activity.reduce((acc, a) => acc + a.minutes, 0);
   const hours = minutesTotal / 60;
@@ -189,33 +270,37 @@ export function derive(state) {
   const essaysApproved = essayRows.filter((e) => e.status === 'approved').length;
   const essaysPending = essayRows.filter((e) => e.status === 'pending').length;
 
-  // Kompetensi = 50% progres video terkait + 50% akurasi kuis kategori (percobaan terbaik)
+  // Competency = average of (video progress of related lessons) and (best-attempt quiz accuracy in that category)
   const competencies = COMPETENCIES.map((c) => {
-    const lesson = lessonRows.find((l) => l.id === c.lesson);
+    const ls = lessonRows.filter((l) => l.competency === c.id);
+    const videoPct = ls.length ? Math.round(ls.reduce((a, l) => a + l.pct, 0) / ls.length) : null;
     const bc = best?.byComp?.[c.id];
-    const quizPct = bc ? Math.round((bc.correct / bc.total) * 100) : 0;
-    return { ...c, videoPct: lesson.pct, quizPct, value: Math.round(lesson.pct * 0.5 + quizPct * 0.5) };
+    const quizPct = bc && bc.total ? Math.round((bc.correct / bc.total) * 100) : null;
+    const parts = [videoPct, quizPct].filter((x) => x !== null);
+    const value = parts.length ? Math.round(parts.reduce((a, b) => a + b, 0) / parts.length) : 0;
+    return { ...c, videoPct: videoPct ?? 0, quizPct: quizPct ?? 0, value };
   });
   const competencyAvg = Math.round(competencies.reduce((a, c) => a + c.value, 0) / competencies.length);
 
-  const quizPassed = !!best && best.pct >= PASSING_PCT;
   const criteria = [
-    { id: 'modules', label: 'Complete all 4 induction videos', met: modulesDone === LESSONS.length, detail: `${modulesDone}/${LESSONS.length} modules` },
-    { id: 'quiz', label: `Quiz score of at least ${PASSING_PCT}%`, met: quizPassed, detail: best ? `Best score ${best.pct}%` : 'Not attempted' },
-    { id: 'essays', label: '3 essays approved by a reviewer', met: essaysApproved === ESSAYS.length, detail: `${essaysApproved}/${ESSAYS.length} approved` },
+    { id: 'modules', label: `Complete all ${lessonCount} induction videos`, met: lessonCount > 0 && modulesDone === lessonCount, detail: `${modulesDone}/${lessonCount} modules` },
+    { id: 'quiz', label: `Quiz score of at least ${passingPct}%`, met: quizPassed, detail: best ? `Best score ${best.pct}%` : 'Not attempted' },
+    { id: 'essays', label: `${ESSAYS.length} essays approved by a reviewer`, met: essaysApproved === ESSAYS.length, detail: `${essaysApproved}/${ESSAYS.length} approved` },
   ];
   let overall;
   if (criteria.every((c) => c.met)) overall = { key: 'pass', label: 'Passed', tone: 'good' };
-  else if (latest && !quizPassed) overall = { key: 'fail', label: 'Not Passed', tone: 'bad', reason: `Quiz score below ${PASSING_PCT}%` };
-  else if (modulesDone < LESSONS.length) overall = { key: 'progress', label: 'In Progress', tone: 'warn', reason: 'Induction videos incomplete' };
+  else if (latest && !quizPassed) overall = { key: 'fail', label: 'Not Passed', tone: 'bad', reason: `Quiz score below ${passingPct}%` };
+  else if (modulesDone < lessonCount) overall = { key: 'progress', label: 'In Progress', tone: 'warn', reason: 'Induction videos incomplete' };
   else overall = { key: 'review', label: 'Awaiting Review', tone: 'warn', reason: 'Essays awaiting manual approval' };
 
   const nextLesson = lessonRows.find((l) => !l.completed) || null;
+  const qids = new Set(content.questions.map((q) => q.id));
+  const quizAnswered = Object.keys(state.quiz.draft).filter((k) => qids.has(k)).length;
 
   return {
-    lessonRows, completionPct, modulesDone, attempts, latest, best, hours, minutesTotal,
-    essayRows, essaysApproved, essaysPending, competencies, competencyAvg, criteria, overall, nextLesson,
-    quizAnswered: Object.keys(state.quiz.draft).length, totalQuestions: QUESTIONS.length, MIN_WORDS,
+    passingPct, docMap, lessonRows, lessonCount, totalMinutes, completionPct, modulesDone, attempts, latest, best, quizPassed,
+    questionCount, minCorrect, hours, minutesTotal, essayRows, essaysApproved, essaysPending, competencies, competencyAvg,
+    criteria, overall, nextLesson, quizAnswered, MIN_WORDS, isAdmin: state.session?.role === 'admin',
   };
 }
 
@@ -223,13 +308,10 @@ const StoreCtx = createContext(null);
 
 export function StoreProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, undefined, load);
-  useEffect(() => {
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    } catch {
-      /* ignore */
-    }
-  }, [state]);
+  const { session, content, ...progress } = state;
+  useEffect(() => write(KEYS.session, session), [session]);
+  useEffect(() => write(KEYS.content, content), [content]);
+  useEffect(() => write(KEYS.progress, progress), [state.lessons, state.quiz, state.essays, state.activity, state.ui]); // eslint-disable-line react-hooks/exhaustive-deps
   const d = useMemo(() => derive(state), [state]);
   return <StoreCtx.Provider value={{ state, dispatch, d }}>{children}</StoreCtx.Provider>;
 }

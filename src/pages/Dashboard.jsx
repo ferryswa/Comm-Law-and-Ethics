@@ -1,8 +1,8 @@
 import React, { useMemo } from 'react';
 import { PlayCircle, Gauge, Layers, Target, Clock, ListChecks, PenLine, ArrowRight, CheckCircle2, Circle } from 'lucide-react';
 import { useStore, dayKey } from '../state/store.jsx';
-import { Card, CardHeader, PageTitle, Kpi, Progress, Donut, ActivityBars, Pill, DemoTag } from '../components/ui.jsx';
-import { PASSING_PCT } from '../data/quiz.js';
+import { Card, CardHeader, Kpi, Progress, Donut, ActivityBars, Pill, DemoTag } from '../components/ui.jsx';
+import hero from '../assets/hero.webp';
 
 const DAY_SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 const fmtHours = (h) => h.toLocaleString('en-GB', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
@@ -36,27 +36,54 @@ export default function Dashboard() {
 
   return (
     <>
-      <PageTitle
-        title="Learning Dashboard"
-        subtitle={`Communication Law & Ethics · Welcome, ${state.learner.name}`}
-        right={
-          <div className="flex items-center gap-2 text-[13px] text-muted">
+      {/* Hero */}
+      <section className="relative overflow-hidden rounded-2xl border border-line bg-white min-h-[300px] sm:min-h-[320px] flex items-center">
+        <img src={hero} alt="" aria-hidden="true" className="absolute inset-0 h-full w-full object-cover object-[78%_center]" />
+        <div className="absolute inset-0 bg-gradient-to-r from-white via-white/90 to-white/10 md:via-white/70 md:to-transparent" aria-hidden="true" />
+        <div className="relative px-6 py-8 sm:px-9 max-w-[560px]">
+          <div className="text-[11.5px] font-bold tracking-[0.16em] text-brand-red">LEARNING DASHBOARD · COMMUNICATION LAW &amp; ETHICS</div>
+          <h1 className="text-[28px] sm:text-[34px] leading-[1.12] font-bold text-ink tracking-tight mt-3">
+            Welcome back, {state.session.name}
+          </h1>
+          <p className="text-[14.5px] text-ink/75 mt-3 max-w-[46ch]">
+            You have completed {d.completionPct}% of the induction path.{' '}
+            {next ? (
+              <>
+                Next up: <strong className="text-ink">{next.title}</strong>.
+              </>
+            ) : (
+              'All videos are done. Finish the quiz and essays to complete your assessment.'
+            )}
+          </p>
+          <div className="mt-6 flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => (next ? openLesson(next.id) : (window.location.hash = 'quiz'))}
+              className="h-11 px-5 rounded-lg bg-brand-red text-white text-[14px] font-semibold hover:bg-brand-red-dark inline-flex items-center gap-2"
+            >
+              <PlayCircle size={18} aria-hidden="true" /> {next ? 'Continue learning' : 'Go to quiz'}
+            </button>
+            <a href="#assessment" className="h-11 px-5 rounded-lg border border-navy-200 bg-white/90 text-navy-700 text-[14px] font-semibold hover:border-navy inline-flex items-center">
+              View assessment
+            </a>
+          </div>
+          <div className="mt-5 flex items-center gap-2 text-[13px] text-muted">
             Pass status <Pill tone={d.overall.tone}>{d.overall.label}</Pill>
           </div>
-        }
-      />
+        </div>
+      </section>
 
       {/* KPI */}
-      <Card className="p-5 sm:p-6">
+      <Card className="p-5 sm:p-6 mt-6">
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-x-6 gap-y-6">
-          <Kpi icon={Gauge} label="Completion" value={d.completionPct} unit="%" hint="Video minutes watched out of 80" />
-          <Kpi icon={Layers} label="Modules completed" value={`${d.modulesDone}/4`} hint={d.modulesDone === 4 ? 'All videos completed' : `${4 - d.modulesDone} remaining`} />
+          <Kpi icon={Gauge} label="Completion" value={d.completionPct} unit="%" hint={`Video minutes watched out of ${d.totalMinutes}`} />
+          <Kpi icon={Layers} label="Modules completed" value={`${d.modulesDone}/${d.lessonCount}`} hint={d.modulesDone === d.lessonCount ? 'All videos completed' : `${d.lessonCount - d.modulesDone} remaining`} />
           <Kpi
             icon={Target}
             label="Best quiz score"
             value={d.best ? d.best.pct : '–'}
             unit={d.best ? '%' : ''}
-            hint={d.best ? `${d.best.correct}/15 correct · pass mark ${PASSING_PCT}%` : `Pass mark ${PASSING_PCT}%`}
+            hint={d.best ? `${d.best.correct}/${d.best.total} correct · pass mark ${d.passingPct}%` : `Pass mark ${d.passingPct}%`}
           />
           <Kpi icon={Clock} label="Learning hours" value={fmtHours(d.hours)} unit=" hrs" hint={`${Math.round(d.minutesTotal)} minutes logged`} />
         </div>
@@ -79,7 +106,7 @@ export default function Dashboard() {
               <div className="min-w-0 flex-1">
                 <div className="text-[19px] font-bold leading-snug">{next.title}</div>
                 <div className="text-[13px] text-white/70 mt-1">
-                  Resume from chapter {next.chapter + 1}: {next.chapters[next.chapter].title}
+                  Resume from chapter {next.chapter + 1}: {next.chapters[next.chapter]?.title}
                 </div>
               </div>
               <ArrowRight size={20} className="shrink-0 text-white/50 group-hover:translate-x-1 transition-transform" aria-hidden="true" />
@@ -105,12 +132,12 @@ export default function Dashboard() {
           <a href="#quiz" className="rounded-xl border border-line bg-white p-4 hover:border-navy-300 transition-colors flex gap-3 items-start">
             <ListChecks size={20} className="text-navy-500 mt-0.5 shrink-0" aria-hidden="true" />
             <div className="min-w-0 flex-1">
-              <div className="text-[14px] font-semibold text-ink">15-question quiz</div>
+              <div className="text-[14px] font-semibold text-ink">{d.questionCount}-question quiz</div>
               <div className="text-[12.5px] text-muted mt-0.5">
-                {d.latest ? `Latest ${d.latest.pct}%` : 'Not attempted'} · pass ≥ {PASSING_PCT}%
+                {d.latest ? `Latest ${d.latest.pct}%` : 'Not attempted'} · pass ≥ {d.passingPct}%
               </div>
             </div>
-            <Pill tone={d.best && d.best.pct >= PASSING_PCT ? 'good' : 'warn'}>{d.best && d.best.pct >= PASSING_PCT ? 'Passed' : 'Pending'}</Pill>
+            <Pill tone={d.quizPassed ? 'good' : 'warn'}>{d.quizPassed ? 'Passed' : 'Pending'}</Pill>
           </a>
           <a href="#essays" className="rounded-xl border border-line bg-white p-4 hover:border-navy-300 transition-colors flex gap-3 items-start">
             <PenLine size={20} className="text-navy-500 mt-0.5 shrink-0" aria-hidden="true" />

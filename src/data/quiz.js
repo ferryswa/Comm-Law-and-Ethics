@@ -193,10 +193,11 @@ export const SAMPLE_ATTEMPT_ANSWERS = Object.fromEntries(
   })
 );
 
-export function scoreAnswers(answers) {
+// Scores answers against a question set. Returns a snapshot so later edits to the bank do not change history.
+export function scoreAnswers(answers, questions = QUESTIONS, passingPct = PASSING_PCT) {
   let correct = 0;
   const byComp = {};
-  for (const q of QUESTIONS) {
+  for (const q of questions) {
     byComp[q.comp] ??= { correct: 0, total: 0 };
     byComp[q.comp].total += 1;
     if (answers[q.id] === q.answer) {
@@ -204,6 +205,7 @@ export function scoreAnswers(answers) {
       byComp[q.comp].correct += 1;
     }
   }
-  const pct = Math.round((correct / QUESTIONS.length) * 100);
-  return { correct, total: QUESTIONS.length, pct, passed: pct >= PASSING_PCT, byComp };
+  const total = questions.length || 1;
+  const pct = Math.round((correct / total) * 100);
+  return { correct, total: questions.length, pct, passed: pct >= passingPct, passingPct, byComp };
 }

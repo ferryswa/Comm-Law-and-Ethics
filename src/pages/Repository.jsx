@@ -1,8 +1,9 @@
 import React, { useMemo, useState } from 'react';
 import { Languages, Search, ExternalLink, ShieldCheck, ShieldAlert, ShieldQuestion, FileSearch, X, Scale, ScrollText, Gavel } from 'lucide-react';
 import { useStore } from '../state/store.jsx';
-import { DOCS, CATEGORIES, TOPICS, STATUS, CHECKED_ON } from '../data/legal.js';
-import { PageTitle, Pill, Empty } from '../components/ui.jsx';
+import { CATEGORIES, TOPICS, STATUS, CHECKED_ON } from '../data/legal.js';
+import { PageTitle, Pill, Empty, DocActions } from '../components/ui.jsx';
+import { formatBytes } from '../state/files.js';
 
 const CAT_ICON = { uu: Scale, etik: ScrollText, mk: Gavel };
 const STATUS_ICON = { verified: ShieldCheck, partial: ShieldAlert, unverified: ShieldQuestion };
@@ -10,6 +11,7 @@ const norm = (s) => s.toLowerCase().normalize('NFKD').replace(/[̀-ͯ]/g, '');
 
 export default function Repository() {
   const { state, dispatch } = useStore();
+  const DOCS = state.content.docs;
   const query = state.ui.repoQuery || '';
   const setQuery = (q) => dispatch({ type: 'ui/repoQuery', q });
   const [cat, setCat] = useState('all');
@@ -33,9 +35,9 @@ export default function Repository() {
       return a.title.localeCompare(b.title, 'id');
     });
     return list;
-  }, [query, cat, topic, status, sort]);
+  }, [DOCS, query, cat, topic, status, sort]);
 
-  const counts = useMemo(() => Object.fromEntries(CATEGORIES.map((c) => [c.id, DOCS.filter((d) => d.category === c.id).length])), []);
+  const counts = useMemo(() => Object.fromEntries(CATEGORIES.map((c) => [c.id, DOCS.filter((d) => d.category === c.id).length])), [DOCS]);
   const filtered = query || cat !== 'all' || topic !== 'all' || status !== 'all';
 
   return (
@@ -180,7 +182,7 @@ function DocCard({ doc }) {
   const CatIcon = CAT_ICON[doc.category];
   const st = STATUS[doc.status];
   const StIcon = STATUS_ICON[doc.status];
-  const catLabel = CATEGORIES.find((c) => c.id === doc.category).label;
+  const catLabel = CATEGORIES.find((c) => c.id === doc.category)?.label || doc.category;
   const unverified = doc.status === 'unverified';
   return (
     <article
@@ -210,18 +212,16 @@ function DocCard({ doc }) {
           <strong className="font-semibold">Catatan verifikasi:</strong> {doc.note}
         </div>
       </div>
-      <div className="border-t border-line px-5 py-3 flex flex-wrap items-center gap-3">
-        <span className="text-[12px] text-muted min-w-0 flex-1">
+      <div className="border-t border-line px-5 py-3 grid gap-2.5">
+        <span className="text-[12px] text-muted">
           <span className="font-semibold text-ink/80">Sumber:</span> {doc.source}
+          {doc.file && (
+            <>
+              {' '}· <span className="font-semibold text-ink/80">Berkas:</span> {doc.file.name} ({formatBytes(doc.file.size)})
+            </>
+          )}
         </span>
-        <a
-          href={doc.url}
-          target="_blank"
-          rel="noreferrer"
-          className="inline-flex items-center gap-1.5 rounded-lg border border-line px-3 h-8 text-[12.5px] font-semibold text-navy-700 hover:border-navy-300 hover:text-brand-red"
-        >
-          Buka sumber <ExternalLink size={13} aria-hidden="true" />
-        </a>
+        <DocActions doc={doc} lang="id" />
       </div>
     </article>
   );

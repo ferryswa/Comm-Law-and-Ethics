@@ -2,7 +2,6 @@ import React, { useState } from 'react';
 import { CheckCircle2, XCircle, Circle, ListChecks, PenLine, Film, ChevronDown, FlaskConical, ArrowRight } from 'lucide-react';
 import { useStore } from '../state/store.jsx';
 import { COMPETENCIES } from '../data/lessons.js';
-import { PASSING_PCT } from '../data/quiz.js';
 import { Card, CardHeader, PageTitle, Pill, Progress, EssayStatus, DemoTag, Button } from '../components/ui.jsx';
 
 const fmtDate = (s) => new Date(s).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' });
@@ -20,7 +19,7 @@ export default function Assessment() {
         <Card className={`p-5 sm:p-6 border-l-4 ${toneBorder}`}>
           <div className="flex flex-wrap items-center gap-3">
             <div>
-              <div className="text-[12.5px] font-semibold text-muted">Pass status · {state.learner.name}</div>
+              <div className="text-[12.5px] font-semibold text-muted">Pass status · {state.session.name}</div>
               <div className="flex items-center gap-3 mt-1">
                 <span className="text-[28px] font-bold text-ink leading-tight">{d.overall.label}</span>
                 <Pill tone={d.overall.tone}>{d.overall.key === 'pass' ? 'All requirements met' : d.overall.reason}</Pill>
@@ -43,27 +42,27 @@ export default function Assessment() {
             ))}
           </ul>
           <p className="text-[12px] text-muted mt-5">
-            Rules: the quiz is passed when the best score is ≥ {PASSING_PCT}%. Essays require manual approval by a reviewer. Passing requires all three.
+            Rules: the quiz is passed when the best score is ≥ {d.passingPct}%. Essays require manual approval by a reviewer. Passing requires all three.
           </p>
         </Card>
 
         <Card className="p-5 sm:p-6">
           <div className="grid grid-cols-3 gap-4 text-center">
-            <Stat icon={Film} value={`${d.modulesDone}/4`} label="Videos completed" />
+            <Stat icon={Film} value={`${d.modulesDone}/${d.lessonCount}`} label="Videos completed" />
             <Stat icon={ListChecks} value={d.best ? `${d.best.pct}%` : '–'} label="Best quiz score" />
             <Stat icon={PenLine} value={`${d.essaysApproved}/3`} label="Essays approved" />
           </div>
           <div className="mt-6">
             <div className="flex justify-between text-[12.5px] text-muted">
               <span>Best score vs pass mark</span>
-              <span className="tabular">{d.best ? d.best.pct : 0}% / {PASSING_PCT}%</span>
+              <span className="tabular">{d.best ? d.best.pct : 0}% / {d.passingPct}%</span>
             </div>
             <div className="relative mt-2">
-              <Progress value={d.best ? d.best.pct : 0} height="h-3" color={d.best && d.best.pct >= PASSING_PCT ? 'bg-good' : 'bg-bad'} label="Best quiz score" />
-              <span className="absolute -top-1 bottom-[-4px] w-[2px] bg-ink" style={{ left: `${PASSING_PCT}%` }} aria-hidden="true" />
+              <Progress value={d.best ? d.best.pct : 0} height="h-3" color={d.quizPassed ? 'bg-good' : 'bg-bad'} label="Best quiz score" />
+              <span className="absolute -top-1 bottom-[-4px] w-[2px] bg-ink" style={{ left: `${d.passingPct}%` }} aria-hidden="true" />
             </div>
             <div className="relative h-4 mt-1 text-[11px] text-muted">
-              <span className="absolute -translate-x-1/2 tabular" style={{ left: `${PASSING_PCT}%` }}>pass mark {PASSING_PCT}%</span>
+              <span className="absolute -translate-x-1/2 tabular" style={{ left: `${d.passingPct}%` }}>pass mark {d.passingPct}%</span>
             </div>
           </div>
         </Card>
@@ -99,7 +98,7 @@ export default function Assessment() {
             <tbody>
               {[...d.attempts].reverse().map((a, i) => {
                 const n = d.attempts.length - i;
-                const passed = a.pct >= PASSING_PCT;
+                const passed = a.pct >= d.passingPct;
                 return (
                   <tr key={a.id} className="border-b border-line last:border-b-0">
                     <td className="px-5 py-3 font-semibold text-ink whitespace-nowrap">
@@ -110,7 +109,7 @@ export default function Assessment() {
                     <td className="px-3 py-3 text-right tabular font-semibold text-ink">{a.pct}%</td>
                     {COMPETENCIES.map((c) => (
                       <td key={c.id} className="px-3 py-3 text-right tabular text-muted">
-                        {a.byComp[c.id].correct}/{a.byComp[c.id].total}
+                        {a.byComp[c.id] ? `${a.byComp[c.id].correct}/${a.byComp[c.id].total}` : '–'}
                       </td>
                     ))}
                     <td className="px-5 py-3">
@@ -154,7 +153,7 @@ export default function Assessment() {
               </li>
             ))}
           </ul>
-          <ReviewerSimulator />
+          {d.isAdmin && <ReviewerSimulator />}
         </Card>
 
         {/* Individual progress */}
@@ -208,9 +207,9 @@ function Stat({ icon: Icon, value, label }) {
   );
 }
 
-// Demo only: simulates the manual approval flow; not a real reviewer feature.
+// Admin-only: manual essay approval (prototype; no separate reviewer workflow).
 function ReviewerSimulator() {
-  const { dispatch, d } = useStore();
+  const { state, dispatch, d } = useStore();
   const [open, setOpen] = useState(false);
   const pending = d.essayRows.filter((e) => e.status === 'pending');
   return (
@@ -221,13 +220,13 @@ function ReviewerSimulator() {
         aria-expanded={open}
         className="w-full flex items-center gap-2 px-5 h-11 text-[12.5px] font-semibold text-muted hover:bg-paper"
       >
-        <FlaskConical size={15} aria-hidden="true" /> Simulate reviewer decision (demo only)
+        <FlaskConical size={15} aria-hidden="true" /> Review essays (admin)
         <ChevronDown size={15} className={`ml-auto transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
         <div className="px-5 pb-5">
           <p className="text-[12px] text-muted mb-3">
-            The prototype has no reviewer module. These buttons only simulate a manual decision so the pass flow can be demonstrated.
+            As administrator you can approve an essay or return it for revision. The decision is recorded with your name.
           </p>
           {pending.length === 0 ? (
             <div className="text-[12.5px] text-muted rounded-lg bg-paper px-3 py-2.5">No essays are awaiting review. Submit an essay from the Essays tab first.</div>
@@ -239,14 +238,14 @@ function ReviewerSimulator() {
                   <Button
                     size="sm"
                     variant="outline"
-                    onClick={() => dispatch({ type: 'essay/review', id: e.id, decision: 'revise', note: 'Strengthen the legal references and concrete steps. (Demo simulation)' })}
+                    onClick={() => dispatch({ type: 'essay/review', id: e.id, decision: 'revise', reviewer: state.session.name, note: 'Strengthen the legal references and concrete steps.' })}
                   >
                     <XCircle size={14} /> Request revision
                   </Button>
                   <Button
                     size="sm"
                     variant="navy"
-                    onClick={() => dispatch({ type: 'essay/review', id: e.id, decision: 'approved', note: 'The analysis meets the criteria. (Demo simulation)' })}
+                    onClick={() => dispatch({ type: 'essay/review', id: e.id, decision: 'approved', reviewer: state.session.name, note: 'The analysis meets the criteria.' })}
                   >
                     <CheckCircle2 size={14} /> Approve
                   </Button>

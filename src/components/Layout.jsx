@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { LayoutDashboard, BookOpen, Library, ClipboardCheck, Search, UserRound, Menu, X, RotateCcw, Info } from 'lucide-react';
+import { LayoutDashboard, BookOpen, Library, ClipboardCheck, Search, UserRound, Menu, X, RotateCcw, Info, Settings2, LogOut } from 'lucide-react';
 import { useStore } from '../state/store.jsx';
 
 export const NAV = [
@@ -7,6 +7,7 @@ export const NAV = [
   { id: 'induction', label: 'Induction', icon: BookOpen, match: ['induction', 'quiz', 'essays'] },
   { id: 'repository', label: 'Legal Repository', icon: Library, match: ['repository'] },
   { id: 'assessment', label: 'Assessment & Achievement', icon: ClipboardCheck, match: ['assessment'] },
+  { id: 'admin', label: 'Administration', icon: Settings2, match: ['admin', 'admin-repository', 'admin-quiz'], admin: true },
 ];
 
 export function Header({ onMenu }) {
@@ -47,12 +48,23 @@ export function Header({ onMenu }) {
         </form>
         <div className="flex items-center gap-3 ml-auto sm:ml-2">
           <div className="hidden lg:block text-right leading-tight">
-            <div className="text-[13px] font-semibold text-ink">{state.learner.name}</div>
-            <div className="text-[11.5px] text-muted">{state.learner.role}</div>
+            <div className="text-[13px] font-semibold text-ink">{state.session.name}</div>
+            <div className="text-[11.5px] text-muted">
+              {state.session.title}
+              {state.session.role === 'admin' && <span className="ml-1.5 rounded bg-brand-red px-1.5 py-px text-[10px] font-bold text-white align-middle">ADMIN</span>}
+            </div>
           </div>
-          <div className="w-9 h-9 rounded-full bg-navy text-white flex items-center justify-center" aria-label={`Demo account: ${state.learner.name}`}>
+          <div className="w-9 h-9 rounded-full bg-navy text-white flex items-center justify-center" aria-label={`Signed in as ${state.session.name}`}>
             <UserRound size={18} aria-hidden="true" />
           </div>
+          <button
+            type="button"
+            onClick={() => dispatch({ type: 'session/logout' })}
+            className="h-9 px-2.5 rounded-lg text-[13px] font-semibold text-navy-700 hover:bg-white inline-flex items-center gap-1.5"
+            title="Sign out"
+          >
+            <LogOut size={16} aria-hidden="true" /> <span className="hidden sm:inline">Sign out</span>
+          </button>
         </div>
       </div>
     </header>
@@ -61,6 +73,7 @@ export function Header({ onMenu }) {
 
 export function Sidebar({ route, open, onClose }) {
   const { d } = useStore();
+  const items = NAV.filter((n) => !n.admin || d.isAdmin);
   const body = (
     <nav className="flex flex-col h-full bg-navy text-white" aria-label="Main menu">
       <div className="px-5 pt-6 pb-3 flex items-center justify-between">
@@ -70,11 +83,13 @@ export function Sidebar({ route, open, onClose }) {
         </button>
       </div>
       <ul className="flex flex-col gap-1 px-3">
-        {NAV.map((n) => {
+        {items.map((n, i) => {
           const active = n.match.includes(route);
           const Icon = n.icon;
           return (
             <li key={n.id}>
+              {n.admin && i > 0 && <div className="mx-3 my-2 border-t border-white/10" aria-hidden="true" />}
+              {n.admin && <div className="px-3 pb-1 text-[10.5px] font-bold tracking-[0.12em] text-white/45">ADMIN</div>}
               <a
                 href={`#${n.id}`}
                 onClick={onClose}
@@ -94,7 +109,7 @@ export function Sidebar({ route, open, onClose }) {
         <div className="text-[11px] uppercase tracking-wider text-white/60 font-semibold">Induction progress</div>
         <div className="flex items-baseline gap-1 mt-1">
           <span className="tabular text-[22px] font-bold">{d.completionPct}%</span>
-          <span className="text-[12px] text-white/60">· {d.modulesDone}/4 modules</span>
+          <span className="text-[12px] text-white/60">· {d.modulesDone}/{d.lessonCount} modules</span>
         </div>
         <div className="mt-2 h-1.5 rounded-full bg-white/15 overflow-hidden">
           <div className="h-full bg-brand-red rounded-full" style={{ width: `${d.completionPct}%` }} />

@@ -1,5 +1,6 @@
-import React, { useState } from 'react';
-import { CheckCircle2, AlertTriangle, XCircle, Clock3, FileEdit } from 'lucide-react';
+import React, { useEffect, useState } from 'react';
+import { CheckCircle2, AlertTriangle, XCircle, Clock3, FileEdit, ExternalLink, Download, X } from 'lucide-react';
+import { downloadFile, docFileKey } from '../state/files.js';
 
 export function Card({ className = '', children, as: Tag = 'section', ...rest }) {
   return (
@@ -224,3 +225,92 @@ export function Empty({ icon: Icon, title, children }) {
     </div>
   );
 }
+
+// ---------- Reference capsules: original source + uploaded document ----------
+export function DocActions({ doc, lang = 'en', size = 'md' }) {
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState('');
+  const t = lang === 'id'
+    ? { src: 'Sumber Asli', dl: 'Unduh Dokumen', none: 'Belum ada dokumen yang diunggah admin', fail: 'Unduhan diblokir di tampilan ini. Buka situs pages.dev.' }
+    : { src: 'Original source', dl: 'Download doc', none: 'No document uploaded by admin yet', fail: 'Download blocked in this preview. Open the pages.dev site.' };
+  const h = size === 'sm' ? 'h-7 px-2.5 text-[11.5px]' : 'h-8 px-3 text-[12.5px]';
+  const onDownload = async () => {
+    setErr('');
+    setBusy(true);
+    try {
+      const ok = await downloadFile(docFileKey(doc.id), doc.file?.name);
+      if (!ok) setErr(t.none);
+    } catch {
+      setErr(t.fail);
+    }
+    setBusy(false);
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {doc.url ? (
+        <a
+          href={doc.url}
+          target="_blank"
+          rel="noreferrer"
+          className={`inline-flex items-center gap-1.5 rounded-full border border-navy-200 bg-white ${h} font-semibold text-navy-700 hover:border-navy hover:bg-navy hover:text-white transition-colors`}
+        >
+          <ExternalLink size={13} aria-hidden="true" /> {t.src}
+        </a>
+      ) : null}
+      <button
+        type="button"
+        onClick={onDownload}
+        disabled={!doc.file || busy}
+        title={doc.file ? `${doc.file.name}` : t.none}
+        className={`inline-flex items-center gap-1.5 rounded-full ${h} font-semibold transition-colors ${
+          doc.file ? 'bg-brand-red text-white hover:bg-brand-red-dark' : 'bg-paper text-navy-300 border border-line cursor-not-allowed'
+        }`}
+      >
+        <Download size={13} aria-hidden="true" /> {t.dl}
+        {doc.file && <span className="font-medium opacity-80">· {doc.file.name.split('.').pop().toUpperCase()}</span>}
+      </button>
+      {err && <span className="text-[11.5px] text-bad">{err}</span>}
+    </div>
+  );
+}
+
+// ---------- In-page modal (no browser dialogs) ----------
+export function Modal({ title, subtitle, onClose, children, footer, wide = false }) {
+  useEffect(() => {
+    const onKey = (e) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return (
+    <div className="fixed inset-0 z-50 flex items-start justify-center bg-navy-950/50 p-3 sm:p-6 overflow-y-auto" role="dialog" aria-modal="true" aria-label={title}>
+      <div className={`w-full ${wide ? 'max-w-[980px]' : 'max-w-[720px]'} rounded-xl bg-white shadow-2xl my-auto flex flex-col max-h-[calc(100vh-24px)] sm:max-h-[calc(100vh-48px)]`}>
+        <div className="flex items-start gap-4 px-5 sm:px-6 py-4 border-b border-line">
+          <div className="min-w-0 flex-1">
+            <h2 className="text-[17px] font-bold text-ink">{title}</h2>
+            {subtitle && <p className="text-[12.5px] text-muted mt-0.5">{subtitle}</p>}
+          </div>
+          <button type="button" onClick={onClose} className="p-1.5 rounded-lg text-muted hover:bg-paper hover:text-ink" aria-label="Close">
+            <X size={18} />
+          </button>
+        </div>
+        <div className="px-5 sm:px-6 py-5 overflow-y-auto scroll-thin flex-1">{children}</div>
+        {footer && <div className="px-5 sm:px-6 py-3.5 border-t border-line flex flex-wrap items-center justify-end gap-2 bg-paper/60 rounded-b-xl">{footer}</div>}
+      </div>
+    </div>
+  );
+}
+
+export function Field({ label, htmlFor, hint, error, children, className = '' }) {
+  return (
+    <div className={`grid gap-1.5 ${className}`}>
+      <label htmlFor={htmlFor} className="text-[12.5px] font-semibold text-ink">
+        {label}
+      </label>
+      {children}
+      {error ? <span className="text-[12px] text-bad">{error}</span> : hint ? <span className="text-[12px] text-muted">{hint}</span> : null}
+    </div>
+  );
+}
+
+export const inputCls =
+  'w-full rounded-lg border border-line bg-white px-3 py-2 text-[14px] text-ink placeholder:text-navy-300 focus:outline-none focus:border-navy-400';

@@ -4,11 +4,10 @@ import {
   ChevronLeft, ChevronRight, Send, Pencil, ChevronDown, XCircle,
 } from 'lucide-react';
 import { useStore } from '../state/store.jsx';
-import { LESSONS, COMPETENCIES } from '../data/lessons.js';
-import { QUESTIONS, PASSING_PCT } from '../data/quiz.js';
+import { COMPETENCIES } from '../data/lessons.js';
+import { objectUrl, videoFileKey } from '../state/files.js';
 import { MIN_WORDS } from '../data/essays.js';
-import { docById } from '../data/legal.js';
-import { Card, PageTitle, Pill, Progress, Button, EssayStatus, DemoTag } from '../components/ui.jsx';
+import { Card, PageTitle, Pill, Progress, Button, EssayStatus, DemoTag, DocActions } from '../components/ui.jsx';
 import { wordCount } from '../state/store.jsx';
 
 const SPEED = 20; // 1 real second = 20 video seconds (simulation)
@@ -26,8 +25,8 @@ export default function Induction({ tab }) {
     <>
       <PageTitle
         title="Induction Learning"
-        subtitle="Four core videos (80 minutes), an auto-scored multiple-choice quiz, and manually reviewed essays."
-        right={<Pill tone="navy" icon={null}>{d.modulesDone}/4 videos completed</Pill>}
+        subtitle={`${d.lessonCount} core videos (${d.totalMinutes} minutes), an auto-scored multiple-choice quiz, and manually reviewed essays.`}
+        right={<Pill tone="navy" icon={null}>{d.modulesDone}/{d.lessonCount} videos completed</Pill>}
       />
       <div role="tablist" aria-label="Induction sections" className="flex gap-1 border-b border-line mb-6 overflow-x-auto">
         {TABS.map((t) => {
@@ -60,8 +59,9 @@ export default function Induction({ tab }) {
 
 function VideoSection() {
   const { state, dispatch, d } = useStore();
-  const selected = state.ui.lesson || 'l1';
-  const lesson = d.lessonRows.find((l) => l.id === selected);
+  const lesson = d.lessonRows.find((l) => l.id === state.ui.lesson) || d.lessonRows[0];
+  const selected = lesson?.id;
+  if (!lesson) return <Card className="p-8 text-center text-muted">No induction materials yet. An administrator can add them under Administration.</Card>;
   return (
     <div className="grid gap-6">
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
@@ -107,19 +107,45 @@ function VideoSection() {
   );
 }
 
+function useVideoSrc(lesson) {
+  const [src, setSrc] = useState(lesson.video?.kind === 'url' ? lesson.video.url : null);
+  useEffect(() => {
+    let url = null;
+    let alive = true;
+    if (lesson.video?.kind === 'file') {
+      objectUrl(videoFileKey(lesson.id)).then((u) => {
+        url = u;
+        if (alive) setSrc(u);
+      });
+    } else {
+      setSrc(lesson.video?.kind === 'url' ? lesson.video.url : null);
+    }
+    return () => {
+      alive = false;
+      if (url) URL.revokeObjectURL(url);
+    };
+  }, [lesson.id, lesson.video?.kind, lesson.video?.url, lesson.video?.uploadedAt]);
+  return src;
+}
+
 function Player({ lesson }) {
-  const { dispatch } = useStore();
-  const total = lesson.minutes * 60;
+  const { dispatch, d } = useStore();
+  const total = Math.max(1, lesson.minutes * 60);
   const [pos, setPos] = useState(lesson.completed ? 0 : Math.min(lesson.watched, total));
   const [playing, setPlaying] = useState(false);
   const maxSeek = lesson.completed ? total : Math.max(lesson.watched, pos);
   const posRef = useRef(pos);
+  const videoRef = useRef(null);
+  const videoSrc = useVideoSrc(lesson);
+  const real = !!videoSrc;
+
   useEffect(() => {
     posRef.current = pos;
   }, [pos]);
 
+  // Simulated playback (placeholder video)
   useEffect(() => {
-    if (!playing) return undefined;
+    if (!playing || real) return undefined;
     const timer = setInterval(() => {
       const np = Math.min(total, posRef.current + SPEED * 0.5);
       posRef.current = np;
@@ -128,85 +154,131 @@ function Player({ lesson }) {
       if (np >= total) setPlaying(false);
     }, 500);
     return () => clearInterval(timer);
-  }, [playing, total, lesson.id, dispatch]);
+  }, [playing, real, total, lesson.id, dispatch]);
 
-  const chIndex = lesson.chapters.reduce((acc, c, i) => (pos >= c.t ? i : acc), 0);
-  const ch = lesson.chapters[chIndex];
-  const seek = (s) => setPos(Math.max(0, Math.min(maxSeek, s)));
+  // Real video: map media time to lesson time
+  const scale = () => {
+    const v = videoRef.current;
+    return v && v.duration && Number.isFinite(v.duration) ? total / v.duration : 1;
+  };
+  const lastSent = useRef(0);
+  const onTime = () => {
+    const v = videoRef.current;
+    if (!v) return;
+    const lp = Math.min(total, v.currentTime * scale());
+    setPos(lp);
+    if (Math.abs(lp - lastSent.current) >= 2 || v.ended) {
+      lastSent.current = lp;
+      dispatch({ type: 'video/progress', id: lesson.id, position: v.ended ? total : lp });
+    }
+  };
+
+  const chapters = lesson.chapters.length ? lesson.chapters : [{ t: 0, title: lesson.title, points: [] }];
+  const chIndex = chapters.reduce((acc, c, i) => (pos >= c.t ? i : acc), 0);
+  const ch = chapters[chIndex];
+  const seek = (s) => {
+    const target = Math.max(0, Math.min(maxSeek, s));
+    if (real && videoRef.current) {
+      videoRef.current.currentTime = target / scale();
+      videoRef.current.play?.().catch(() => {});
+    }
+    setPos(target);
+  };
 
   return (
     <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_320px]">
       <div className="min-w-0">
         {/* Screen */}
-        <div className="relative aspect-video rounded-xl overflow-hidden bg-navy text-white">
-          <div className="absolute inset-0 bg-[radial-gradient(120%_90%_at_100%_0%,#26365A_0%,#17243B_55%,#0F1828_100%)]" />
-          <div className="absolute top-0 left-0 right-0 flex flex-wrap items-center gap-2 p-3 sm:p-4">
-            <span className="rounded bg-brand-red px-2 py-0.5 text-[10.5px] font-bold tracking-wider">PLACEHOLDER VIDEO</span>
-            <span className="text-[11.5px] text-white/70">Video not yet produced · simulated playback {SPEED}×</span>
-          </div>
-          <div className="absolute inset-0 flex flex-col justify-center px-5 sm:px-10 pt-10 pb-16">
-            <div className="text-[11px] sm:text-[12px] font-semibold tracking-[0.14em] text-white/55">
-              MODULE {lesson.no} · CHAPTER {chIndex + 1} OF {lesson.chapters.length}
-            </div>
-            <div className="text-[18px] sm:text-[26px] font-bold leading-tight mt-1.5 max-w-[30ch]">{ch.title}</div>
-            <ul className="mt-3 sm:mt-4 grid gap-1.5 sm:gap-2 max-w-[62ch] text-[12px] sm:text-[14px] text-white/85">
-              {ch.points.map((p) => (
-                <li key={p} className="flex gap-2">
-                  <span className="mt-[7px] w-1.5 h-1.5 rounded-full bg-brand-red shrink-0" aria-hidden="true" />
-                  <span>{p}</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-          {!playing && pos === 0 && (
-            <button
-              type="button"
-              onClick={() => setPlaying(true)}
-              className="absolute inset-0 flex items-center justify-center bg-navy-950/40 hover:bg-navy-950/30 transition-colors"
-              aria-label="Play simulated video"
+        {real ? (
+          <div className="relative aspect-video rounded-xl overflow-hidden bg-black">
+            <video
+              ref={videoRef}
+              src={videoSrc}
+              controls
+              preload="metadata"
+              className="w-full h-full"
+              onTimeUpdate={onTime}
+              onEnded={onTime}
+              onLoadedMetadata={() => {
+                if (videoRef.current && !lesson.completed) videoRef.current.currentTime = Math.min(lesson.watched, total) / scale();
+              }}
             >
-              <span className="w-16 h-16 rounded-full bg-brand-red flex items-center justify-center shadow-xl">
-                <Play size={28} fill="currentColor" className="ml-1" />
-              </span>
-            </button>
-          )}
-          {/* Controls */}
-          <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent px-3 sm:px-4 pt-6 pb-3">
-            <label htmlFor={`scrub-${lesson.id}`} className="sr-only">Video position</label>
-            <div className="relative h-1.5 rounded-full bg-white/20">
-              <div className="absolute inset-y-0 left-0 rounded-full bg-white/35" style={{ width: `${(maxSeek / total) * 100}%` }} />
-              <div className="absolute inset-y-0 left-0 rounded-full bg-brand-red" style={{ width: `${(pos / total) * 100}%` }} />
-              {lesson.chapters.slice(1).map((c) => (
-                <span key={c.t} className="absolute top-0 bottom-0 w-[2px] bg-navy" style={{ left: `${(c.t / total) * 100}%` }} aria-hidden="true" />
-              ))}
-              <input
-                id={`scrub-${lesson.id}`}
-                type="range"
-                min={0}
-                max={total}
-                step={1}
-                value={pos}
-                onChange={(e) => seek(Number(e.target.value))}
-                className="absolute inset-0 w-full opacity-0 cursor-pointer"
-              />
+              <track kind="captions" />
+            </video>
+            <span className="absolute top-3 left-3 rounded bg-black/60 px-2 py-0.5 text-[11px] font-semibold text-white pointer-events-none">
+              {lesson.video.kind === 'file' ? `Uploaded video · ${lesson.video.name}` : 'Video from URL'}
+            </span>
+          </div>
+        ) : (
+          <div className="relative aspect-video rounded-xl overflow-hidden bg-navy text-white">
+            <div className="absolute inset-0 bg-[radial-gradient(120%_90%_at_100%_0%,#26365A_0%,#17243B_55%,#0F1828_100%)]" />
+            <div className="absolute top-0 left-0 right-0 flex flex-wrap items-center gap-2 p-3 sm:p-4">
+              <span className="rounded bg-brand-red px-2 py-0.5 text-[10.5px] font-bold tracking-wider">PLACEHOLDER VIDEO</span>
+              <span className="text-[11.5px] text-white/70">Video not yet produced · simulated playback {SPEED}×</span>
             </div>
-            <div className="flex items-center gap-1 sm:gap-2 mt-2">
-              <button type="button" onClick={() => setPlaying((p) => !p)} className="p-2 rounded hover:bg-white/10" aria-label={playing ? 'Pause' : 'Play'}>
-                {playing ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
+            <div className="absolute inset-0 flex flex-col justify-center px-5 sm:px-10 pt-10 pb-16">
+              <div className="text-[11px] sm:text-[12px] font-semibold tracking-[0.14em] text-white/55">
+                MODULE {lesson.no} · CHAPTER {chIndex + 1} OF {chapters.length}
+              </div>
+              <div className="text-[18px] sm:text-[26px] font-bold leading-tight mt-1.5 max-w-[30ch]">{ch.title}</div>
+              <ul className="mt-3 sm:mt-4 grid gap-1.5 sm:gap-2 max-w-[62ch] text-[12px] sm:text-[14px] text-white/85">
+                {ch.points.map((p) => (
+                  <li key={p} className="flex gap-2">
+                    <span className="mt-[7px] w-1.5 h-1.5 rounded-full bg-brand-red shrink-0" aria-hidden="true" />
+                    <span>{p}</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            {!playing && pos === 0 && (
+              <button
+                type="button"
+                onClick={() => setPlaying(true)}
+                className="absolute inset-0 flex items-center justify-center bg-navy-950/40 hover:bg-navy-950/30 transition-colors"
+                aria-label="Play simulated video"
+              >
+                <span className="w-16 h-16 rounded-full bg-brand-red flex items-center justify-center shadow-xl">
+                  <Play size={28} fill="currentColor" className="ml-1" />
+                </span>
               </button>
-              <button type="button" onClick={() => seek(pos - 30)} className="p-2 rounded hover:bg-white/10" aria-label="Back 30 seconds">
-                <RotateCcw size={16} />
-              </button>
-              <button type="button" onClick={() => seek(pos + 30)} className="p-2 rounded hover:bg-white/10" aria-label="Forward 30 seconds (up to the part already watched)">
-                <RotateCw size={16} />
-              </button>
-              <span className="tabular text-[12.5px] text-white/85 ml-1">
-                {fmt(pos)} / {fmt(total)}
-              </span>
-              <span className="ml-auto text-[11.5px] text-white/60 hidden sm:inline">Skipping ahead is limited to the part already watched</span>
+            )}
+            <div className="absolute bottom-0 left-0 right-0 bg-gradient-to-t from-black/60 to-transparent px-3 sm:px-4 pt-6 pb-3">
+              <label htmlFor={`scrub-${lesson.id}`} className="sr-only">Video position</label>
+              <div className="relative h-1.5 rounded-full bg-white/20">
+                <div className="absolute inset-y-0 left-0 rounded-full bg-white/35" style={{ width: `${(maxSeek / total) * 100}%` }} />
+                <div className="absolute inset-y-0 left-0 rounded-full bg-brand-red" style={{ width: `${(pos / total) * 100}%` }} />
+                {chapters.slice(1).map((c) => (
+                  <span key={c.t} className="absolute top-0 bottom-0 w-[2px] bg-navy" style={{ left: `${(c.t / total) * 100}%` }} aria-hidden="true" />
+                ))}
+                <input
+                  id={`scrub-${lesson.id}`}
+                  type="range"
+                  min={0}
+                  max={total}
+                  step={1}
+                  value={pos}
+                  onChange={(e) => seek(Number(e.target.value))}
+                  className="absolute inset-0 w-full opacity-0 cursor-pointer"
+                />
+              </div>
+              <div className="flex items-center gap-1 sm:gap-2 mt-2">
+                <button type="button" onClick={() => setPlaying((p) => !p)} className="p-2 rounded hover:bg-white/10" aria-label={playing ? 'Pause' : 'Play'}>
+                  {playing ? <Pause size={18} fill="currentColor" /> : <Play size={18} fill="currentColor" />}
+                </button>
+                <button type="button" onClick={() => seek(pos - 30)} className="p-2 rounded hover:bg-white/10" aria-label="Back 30 seconds">
+                  <RotateCcw size={16} />
+                </button>
+                <button type="button" onClick={() => seek(pos + 30)} className="p-2 rounded hover:bg-white/10" aria-label="Forward 30 seconds (up to the part already watched)">
+                  <RotateCw size={16} />
+                </button>
+                <span className="tabular text-[12.5px] text-white/85 ml-1">
+                  {fmt(pos)} / {fmt(total)}
+                </span>
+                <span className="ml-auto text-[11.5px] text-white/60 hidden sm:inline">Skipping ahead is limited to the part already watched</span>
+              </div>
             </div>
           </div>
-        </div>
+        )}
 
         {/* About */}
         <Card className="mt-5 p-5">
@@ -226,27 +298,28 @@ function Player({ lesson }) {
             )}
           </div>
           <p className="text-[14px] text-ink/85 mt-2 max-w-[70ch] leading-relaxed">{lesson.summary}</p>
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <span className="text-[12.5px] font-semibold text-muted flex items-center gap-1.5">
-              <BookMarked size={14} aria-hidden="true" /> References:
-            </span>
-            {lesson.refs.map((r) => {
-              const doc = docById(r);
-              return (
-                <button
-                  key={r}
-                  type="button"
-                  onClick={() => {
-                    dispatch({ type: 'ui/repoQuery', q: doc.short });
-                    window.location.hash = 'repository';
-                  }}
-                  className="rounded-full border border-line bg-paper px-2.5 py-1 text-[12px] font-medium text-navy-700 hover:border-navy-300"
-                >
-                  {doc.short}
-                </button>
-              );
-            })}
-          </div>
+          {lesson.refs.length > 0 && (
+            <div className="mt-5">
+              <h3 className="text-[12.5px] font-semibold text-muted flex items-center gap-1.5">
+                <BookMarked size={14} aria-hidden="true" /> References
+              </h3>
+              <ul className="mt-2 divide-y divide-line rounded-lg border border-line">
+                {lesson.refs.map((r) => {
+                  const doc = d.docMap[r];
+                  if (!doc) return null;
+                  return (
+                    <li key={r} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-3.5 py-2.5">
+                      <div className="min-w-0 flex-1">
+                        <div className="text-[12px] font-bold text-brand-red">{doc.short}</div>
+                        <div className="text-[13px] text-ink leading-snug truncate" title={doc.title}>{doc.title}</div>
+                      </div>
+                      <DocActions doc={doc} size="sm" />
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          )}
         </Card>
       </div>
 
@@ -257,13 +330,13 @@ function Player({ lesson }) {
           <span className="tabular text-[12.5px] text-muted">{lesson.pct}% watched</span>
         </div>
         <ol className="pb-3">
-          {lesson.chapters.map((c, i) => {
-            const end = lesson.chapters[i + 1]?.t ?? total;
+          {chapters.map((c, i) => {
+            const end = chapters[i + 1]?.t ?? total;
             const done = maxSeek >= end - 1;
             const locked = c.t > maxSeek;
             const active = i === chIndex;
             return (
-              <li key={c.t}>
+              <li key={`${c.t}-${i}`}>
                 <button
                   type="button"
                   disabled={locked}
@@ -295,6 +368,9 @@ function Player({ lesson }) {
             );
           })}
         </ol>
+        {real && (
+          <p className="px-5 pb-4 -mt-1 text-[11.5px] text-muted">Key points for each chapter appear in the placeholder view; with a real video, use the chapter list to jump.</p>
+        )}
       </Card>
     </div>
   );
@@ -302,7 +378,7 @@ function Player({ lesson }) {
 
 /* ---------------------------------- QUIZ ---------------------------------- */
 
-const LETTERS = ['A', 'B', 'C', 'D'];
+const LETTERS = ['A', 'B', 'C', 'D', 'E', 'F'];
 const compLabel = (id) => COMPETENCIES.find((c) => c.id === id)?.label;
 
 function QuizSection() {
@@ -321,7 +397,7 @@ function QuizSection() {
           <div className="flex-1 min-w-[240px]">
             <h2 className="text-[18px] font-bold text-ink">Law & Ethics Knowledge Quiz</h2>
             <p className="text-[13.5px] text-muted mt-1 max-w-[60ch]">
-              15 multiple-choice questions across all four modules, scored automatically. The pass mark is <strong className="text-ink">{PASSING_PCT}%</strong> (at least 12 correct). Attempts are unlimited; your best score counts toward passing.
+              {d.questionCount} multiple-choice questions across the induction modules, scored automatically. The pass mark is <strong className="text-ink">{d.passingPct}%</strong> (at least {d.minCorrect} correct). Attempts are unlimited; your best score counts toward passing.
             </p>
           </div>
           <Button onClick={() => setMode('taking')}>
@@ -336,10 +412,12 @@ function QuizSection() {
 
 function QuizTaking({ onDone }) {
   const { state, dispatch, d } = useStore();
-  const idx = state.quiz.current;
+  const QUESTIONS = state.content.questions;
+  const idx = Math.min(state.quiz.current, Math.max(0, QUESTIONS.length - 1));
   const q = QUESTIONS[idx];
-  const chosen = state.quiz.draft[q.id];
   const [confirm, setConfirm] = useState(false);
+  if (!q) return <Card className="p-8 text-center text-muted">The quiz bank is empty. An administrator can add questions under Administration.</Card>;
+  const chosen = state.quiz.draft[q.id];
   const allAnswered = d.quizAnswered === QUESTIONS.length;
 
   const submit = () => {
@@ -453,8 +531,11 @@ function QuizTaking({ onDone }) {
 }
 
 function QuizResult({ attempt }) {
+  const { state, d } = useStore();
+  const QUESTIONS = attempt.questions || state.content.questions;
+  const passMark = attempt.passingPct ?? d.passingPct;
   const [open, setOpen] = useState(false);
-  const passed = attempt.pct >= PASSING_PCT;
+  const passed = attempt.pct >= passMark;
   const date = new Date(attempt.at).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' });
   return (
     <Card>
@@ -470,10 +551,10 @@ function QuizResult({ attempt }) {
             {attempt.sample && <DemoTag />}
           </div>
           <p className="text-[13px] text-muted mt-1">
-            {date} · pass mark {PASSING_PCT}%
+            {date} · pass mark {passMark}%
           </p>
           <div className="grid sm:grid-cols-2 gap-x-6 gap-y-2.5 mt-4">
-            {COMPETENCIES.map((c) => {
+            {COMPETENCIES.filter((c) => attempt.byComp[c.id]?.total).map((c) => {
               const b = attempt.byComp[c.id];
               return (
                 <div key={c.id}>
@@ -504,7 +585,7 @@ function QuizResult({ attempt }) {
           {QUESTIONS.map((q, i) => {
             const a = attempt.answers[q.id];
             const ok = a === q.answer;
-            const doc = docById(q.ref);
+            const doc = d.docMap[q.ref];
             return (
               <li key={q.id} className="px-5 sm:px-6 py-4">
                 <div className="flex gap-3">
@@ -520,9 +601,12 @@ function QuizResult({ attempt }) {
                       {!ok && <span className="text-good">Correct answer: {LETTERS[q.answer]}. {q.options[q.answer]}</span>}
                     </div>
                     <p className="text-[13px] text-muted mt-1.5 max-w-[75ch]">{q.why}</p>
-                    <a href={doc.url} target="_blank" rel="noreferrer" className="inline-block text-[12px] font-semibold text-navy-600 hover:text-brand-red mt-1.5">
-                      Source: {doc.short} ↗
-                    </a>
+                    {doc && (
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <span className="text-[12px] font-semibold text-muted">Source: {doc.short}</span>
+                        <DocActions doc={doc} size="sm" />
+                      </div>
+                    )}
                   </div>
                 </div>
               </li>
