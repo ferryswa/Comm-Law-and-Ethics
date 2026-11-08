@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
-import { LogIn, Eye, EyeOff, ShieldCheck, Info, Database } from 'lucide-react';
-import { useStore, REMOTE } from '../state/store.jsx';
+import { LogIn, Eye, EyeOff, ShieldCheck, GraduationCap } from 'lucide-react';
+import { useStore } from '../state/store.jsx';
 import { api } from '../state/backend.js';
 import hero from '../assets/hero.webp';
 
@@ -101,17 +101,8 @@ export default function Login() {
             </div>
           </form>
           <p className="mt-4 flex gap-1.5 text-[12px] text-muted max-w-[420px]">
-            {REMOTE ? (
-              <>
-                <Database size={14} className="shrink-0 mt-px" aria-hidden="true" />
-                Connected to Supabase. Content, uploaded documents, and learner progress are stored on the server and shared across devices.
-              </>
-            ) : (
-              <>
-                <Info size={14} className="shrink-0 mt-px" aria-hidden="true" />
-                Offline preview: credentials are checked in the browser and data stays on this device.
-              </>
-            )}
+            <GraduationCap size={14} className="shrink-0 mt-px" aria-hidden="true" />
+            This Web Site is intended solely for academic purposes as part of the Communication Law and Ethics coursework at the University of Queensland.
           </p>
         </div>
       </div>
