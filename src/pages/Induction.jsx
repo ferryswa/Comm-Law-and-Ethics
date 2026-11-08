@@ -5,7 +5,7 @@ import {
 } from 'lucide-react';
 import { useStore } from '../state/store.jsx';
 import { COMPETENCIES } from '../data/lessons.js';
-import { objectUrl, videoFileKey } from '../state/files.js';
+import { api } from '../state/backend.js';
 import { MIN_WORDS } from '../data/essays.js';
 import { Card, PageTitle, Pill, Progress, Button, EssayStatus, DemoTag, DocActions } from '../components/ui.jsx';
 import { wordCount } from '../state/store.jsx';
@@ -110,21 +110,24 @@ function VideoSection() {
 function useVideoSrc(lesson) {
   const [src, setSrc] = useState(lesson.video?.kind === 'url' ? lesson.video.url : null);
   useEffect(() => {
-    let url = null;
     let alive = true;
+    let objUrl = null;
     if (lesson.video?.kind === 'file') {
-      objectUrl(videoFileKey(lesson.id)).then((u) => {
-        url = u;
-        if (alive) setSrc(u);
-      });
+      api
+        .videoUrl(lesson)
+        .then((u) => {
+          if (u && u.startsWith('blob:')) objUrl = u;
+          if (alive) setSrc(u);
+        })
+        .catch(() => alive && setSrc(null));
     } else {
       setSrc(lesson.video?.kind === 'url' ? lesson.video.url : null);
     }
     return () => {
       alive = false;
-      if (url) URL.revokeObjectURL(url);
+      if (objUrl) URL.revokeObjectURL(objUrl);
     };
-  }, [lesson.id, lesson.video?.kind, lesson.video?.url, lesson.video?.uploadedAt]);
+  }, [lesson.id, lesson.video?.kind, lesson.video?.url, lesson.video?.uploadedAt]); // eslint-disable-line react-hooks/exhaustive-deps
   return src;
 }
 

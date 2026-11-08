@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { CheckCircle2, AlertTriangle, XCircle, Clock3, FileEdit, ExternalLink, Download, X } from 'lucide-react';
-import { downloadFile, docFileKey } from '../state/files.js';
+import { api, saveBlob } from '../state/backend.js';
 
 export function Card({ className = '', children, as: Tag = 'section', ...rest }) {
   return (
@@ -238,8 +238,9 @@ export function DocActions({ doc, lang = 'en', size = 'md' }) {
     setErr('');
     setBusy(true);
     try {
-      const ok = await downloadFile(docFileKey(doc.id), doc.file?.name);
-      if (!ok) setErr(t.none);
+      const blob = await api.docBlob(doc);
+      if (!blob) setErr(t.none);
+      else await saveBlob(blob, doc.file?.name);
     } catch {
       setErr(t.fail);
     }

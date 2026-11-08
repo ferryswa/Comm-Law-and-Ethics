@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { LayoutDashboard, BookOpen, Library, ClipboardCheck, Search, UserRound, Menu, X, RotateCcw, Info, Settings2, LogOut } from 'lucide-react';
-import { useStore } from '../state/store.jsx';
+import { useStore, REMOTE } from '../state/store.jsx';
+import { api } from '../state/backend.js';
 
 export const NAV = [
   { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard, match: ['dashboard'] },
@@ -59,7 +60,10 @@ export function Header({ onMenu }) {
           </div>
           <button
             type="button"
-            onClick={() => dispatch({ type: 'session/logout' })}
+            onClick={async () => {
+              await api.signOut().catch(() => {});
+              dispatch({ type: 'session/logout' });
+            }}
             className="h-9 px-2.5 rounded-lg text-[13px] font-semibold text-navy-700 hover:bg-white inline-flex items-center gap-1.5"
             title="Sign out"
           >
@@ -142,7 +146,15 @@ export function DemoBanner() {
     <div className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-navy-200 bg-navy-50 px-4 py-2.5 text-[12.5px] text-navy-700 mb-6">
       <Info size={16} className="shrink-0 text-navy-500" aria-hidden="true" />
       <span className="flex-1 min-w-[220px]">
-        <strong className="font-semibold">MVP prototype, demo mode.</strong> Progress, scores, and essays are sample data stored in this browser only. Not an official Kompas system or employee record.
+        {REMOTE ? (
+          <>
+            <strong className="font-semibold">MVP prototype · Supabase.</strong> Your progress is saved to your account. Starting progress, scores, and essays are sample data, not an official Kompas system or employee record.
+          </>
+        ) : (
+          <>
+            <strong className="font-semibold">MVP prototype, offline demo.</strong> Progress, scores, and essays are sample data stored in this browser only. Not an official Kompas system or employee record.
+          </>
+        )}
       </span>
       {confirm ? (
         <span className="flex items-center gap-2">

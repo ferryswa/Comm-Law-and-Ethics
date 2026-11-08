@@ -10,7 +10,7 @@ Stack: React 18 · Vite 5 · Tailwind CSS 3 · lucide-react. Build menghasilkan 
 - `admin / admin`: administrator, semua modul + **Administration**
 - `learner / learner`: tampilan peserta saja
 
-Login hanya untuk demonstrasi (dicek di browser), bukan autentikasi aman.
+Di build Supabase, login memakai Supabase Auth. Password `admin` sangat lemah: ganti sebelum dipakai di luar demo.
 
 ## Modul
 1. **Dashboard** — penyelesaian %, modul selesai, skor kuis, jam belajar, progres per modul, aktivitas 7 hari, capaian kompetensi.
@@ -21,8 +21,12 @@ Login hanya untuk demonstrasi (dicek di browser), bukan autentikasi aman.
 
 Setiap referensi punya tombol kapsul **Sumber Asli** (tautan resmi) dan **Unduh Dokumen** (berkas yang diunggah admin).
 
-## Penyimpanan
-Tanpa backend: konten admin & progres di `localStorage`, berkas unggahan di IndexedDB browser. Artinya perubahan admin hanya terlihat di browser yang sama. Untuk dipakai bersama, sambungkan ke backend (mis. Supabase Storage + Postgres).
+## Backend: Supabase
+Build utama (`npm run build`) terhubung ke Supabase (lihat `supabase/README.md`): login lewat Supabase Auth, konten di Postgres dengan RLS (hanya admin yang bisa menulis), dokumen & video di Supabase Storage, dan progres tiap peserta tersimpan per akun.
+
+Konfigurasi ada di `.env` (`VITE_SUPABASE_URL`, `VITE_SUPABASE_KEY` = publishable key, aman untuk publik karena data dilindungi RLS).
+
+Build offline (`npm run build:offline`, dipakai untuk pratinjau artifact Claude) tidak memakai jaringan: data disimpan di `localStorage`/IndexedDB browser.
 
 ## Menjalankan lokal
 ```bash

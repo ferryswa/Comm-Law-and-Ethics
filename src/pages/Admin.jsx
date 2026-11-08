@@ -3,10 +3,11 @@ import {
   BookOpen, Library, ListChecks, Plus, Pencil, Trash2, ArrowUp, ArrowDown, Upload, Eye, FileText, Film, RotateCcw,
   Search, CheckCircle2, X, Save, AlertTriangle,
 } from 'lucide-react';
-import { useStore, uid } from '../state/store.jsx';
+import { useStore, uid, seedContent } from '../state/store.jsx';
+import { api } from '../state/backend.js';
 import { COMPETENCIES } from '../data/lessons.js';
 import { CATEGORIES, TOPICS, STATUS } from '../data/legal.js';
-import { putFile, deleteFile, clearFiles, objectUrl, docFileKey, videoFileKey, formatBytes } from '../state/files.js';
+import { formatBytes } from '../state/files.js';
 import { Card, PageTitle, Pill, Button, Modal, Field, inputCls, DocActions, Empty } from '../components/ui.jsx';
 
 const TABS = [
@@ -26,9 +27,44 @@ const parseTime = (v) => {
 const compLabel = (id) => COMPETENCIES.find((c) => c.id === id)?.label || id;
 const lines = (t) => t.split('\n').map((x) => x.trim()).filter(Boolean);
 
+function useOp() {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const run = async (fn) => {
+    setBusy(true);
+    setError('');
+    try {
+      await fn();
+      return true;
+    } catch (e) {
+      setError(e?.message || 'Something went wrong. Try again.');
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+  return { run, busy, error, setError };
+}
+
+function OpError({ error, onClose }) {
+  if (!error) return null;
+  return (
+    <div role="alert" className="rounded-lg bg-bad-soft text-bad px-4 py-2.5 text-[13px] flex items-center gap-2">
+      <AlertTriangle size={15} className="shrink-0" />
+      <span className="flex-1">{error}</span>
+      {onClose && (
+        <button type="button" onClick={onClose} aria-label="Dismiss">
+          <X size={15} />
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function Admin({ tab }) {
   const { state, dispatch } = useStore();
   const [confirmReset, setConfirmReset] = useState(false);
+  const op = useOp();
   const c = state.content;
   return (
     <>
@@ -42,13 +78,17 @@ export default function Admin({ tab }) {
               <Button size="sm" variant="outline" onClick={() => setConfirmReset(false)}>Cancel</Button>
               <Button
                 size="sm"
-                onClick={async () => {
-                  await clearFiles();
-                  dispatch({ type: 'content/reset' });
-                  setConfirmReset(false);
-                }}
+                disabled={op.busy}
+                onClick={() =>
+                  op.run(async () => {
+                    const seed = seedContent();
+                    await api.resetContent(seed);
+                    dispatch({ type: 'content/replace', content: seed });
+                    setConfirmReset(false);
+                  })
+                }
               >
-                Restore defaults
+                {op.busy ? 'Restoring…' : 'Restore defaults'}
               </Button>
             </div>
           ) : (
@@ -58,6 +98,7 @@ export default function Admin({ tab }) {
           )
         }
       />
+      {op.error && <div className="mb-4"><OpError error={op.error} onClose={() => op.setError('')} /></div>}
       <div className="grid grid-cols-3 gap-3 mb-6">
         <Count icon={BookOpen} label="Lessons" value={c.lessons.length} />
         <Count icon={Library} label="Documents" value={`${c.docs.length}`} hint={`${c.docs.filter((x) => x.file).length} with uploaded file`} />
@@ -137,11 +178,22 @@ function IconBtn({ label, onClick, children, disabled, tone = 'navy' }) {
 /* ============================ INDUCTION MATERIALS ============================ */
 
 function MaterialsAdmin() {
-  const { dispatch, d } = useStore();
+  const { state, dispatch, d } = useStore();
   const [editing, setEditing] = useState(null);
   const [del, setDel] = useState(null);
+  const op = useOp();
+  const move = (id, dir) =>
+    op.run(async () => {
+      const list = [...state.content.lessons];
+      const i = list.findIndex((l) => l.id === id);
+      const j = i + dir;
+      [list[i], list[j]] = [list[j], list[i]];
+      await api.saveLessonOrder(list);
+      dispatch({ type: 'content/lesson/move', id, dir });
+    });
   return (
     <div className="grid gap-4">
+      <OpError error={op.error} onClose={() => op.setError('')} />
       <div className="flex flex-wrap items-center justify-between gap-3">
         <p className="text-[13.5px] text-muted">
           {d.lessonCount} lessons · {d.totalMinutes} minutes total. Order here is the order learners see.
@@ -176,16 +228,18 @@ function MaterialsAdmin() {
                     <ConfirmInline
                       text="Delete this lesson?"
                       onNo={() => setDel(null)}
-                      onYes={async () => {
-                        if (l.video?.kind === 'file') await deleteFile(videoFileKey(l.id));
-                        dispatch({ type: 'content/lesson/delete', id: l.id });
-                        setDel(null);
-                      }}
+                      onYes={() =>
+                        op.run(async () => {
+                          await api.deleteLesson(l);
+                          dispatch({ type: 'content/lesson/delete', id: l.id });
+                          setDel(null);
+                        })
+                      }
                     />
                   ) : (
                     <>
-                      <IconBtn label="Move up" disabled={i === 0} onClick={() => dispatch({ type: 'content/lesson/move', id: l.id, dir: -1 })}><ArrowUp size={15} /></IconBtn>
-                      <IconBtn label="Move down" disabled={i === d.lessonRows.length - 1} onClick={() => dispatch({ type: 'content/lesson/move', id: l.id, dir: 1 })}><ArrowDown size={15} /></IconBtn>
+                      <IconBtn label="Move up" disabled={i === 0 || op.busy} onClick={() => move(l.id, -1)}><ArrowUp size={15} /></IconBtn>
+                      <IconBtn label="Move down" disabled={i === d.lessonRows.length - 1 || op.busy} onClick={() => move(l.id, 1)}><ArrowDown size={15} /></IconBtn>
                       <Button size="sm" variant="outline" onClick={() => setEditing(l)}><Pencil size={14} /> Edit</Button>
                       <IconBtn label="Delete lesson" tone="bad" onClick={() => setDel(l.id)}><Trash2 size={15} /></IconBtn>
                     </>
@@ -256,16 +310,18 @@ function LessonEditor({ lesson, onClose }) {
   const save = async () => {
     if (!validate()) return;
     setSaving(true);
+    try {
     let video = null;
     if (f.videoMode === 'url') video = { kind: 'url', url: f.videoUrl.trim() };
     if (f.videoMode === 'file') {
-      if (videoFile) video = { kind: 'file', ...(await putFile(videoFileKey(f.id), videoFile)) };
-      else video = lesson.video;
+      if (videoFile) {
+        video = { kind: 'file', ...(await api.uploadVideo({ id: f.id }, videoFile)) };
+        if (lesson?.video?.path) await api.removeVideo(lesson);
+      } else video = lesson.video;
     }
-    if (f.videoMode !== 'file' && lesson?.video?.kind === 'file') await deleteFile(videoFileKey(f.id));
-    dispatch({
-      type: 'content/lesson/save',
-      lesson: {
+    if (f.videoMode !== 'file' && lesson?.video?.kind === 'file') await api.removeVideo(lesson);
+    const idx = state.content.lessons.findIndex((l) => l.id === f.id);
+    const saved = {
         id: f.id,
         title: f.title.trim(),
         minutes: Number(f.minutes),
@@ -274,10 +330,15 @@ function LessonEditor({ lesson, onClose }) {
         refs: f.refs.filter((r) => state.content.docs.some((d) => d.id === r)),
         chapters: f.chapters.map((c) => ({ t: parseTime(c.time), title: c.title.trim(), points: lines(c.points) })),
         video,
-      },
-    });
+    };
+    await api.saveLesson(saved, idx >= 0 ? idx : state.content.lessons.length);
+    dispatch({ type: 'content/lesson/save', lesson: saved });
     setSaving(false);
     onClose();
+    } catch (e) {
+      setSaving(false);
+      setErrors((p) => ({ ...p, _save: e.message || 'Could not save. Try again.' }));
+    }
   };
 
   return (
@@ -289,7 +350,7 @@ function LessonEditor({ lesson, onClose }) {
       footer={
         <>
           {Object.keys(errors).length > 0 && (
-            <span className="mr-auto text-[12.5px] text-bad flex items-center gap-1.5"><AlertTriangle size={14} /> Fix the highlighted fields.</span>
+            <span className="mr-auto text-[12.5px] text-bad flex items-center gap-1.5"><AlertTriangle size={14} /> {errors._save || 'Fix the highlighted fields.'}</span>
           )}
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button onClick={save} disabled={saving}><Save size={15} /> {saving ? 'Saving…' : 'Save lesson'}</Button>
@@ -436,9 +497,17 @@ function RepositoryAdmin() {
       setMsg({ tone: 'bad', text: `“${file.name}” is larger than ${formatBytes(DOC_MAX)}.` });
       return;
     }
-    const meta = await putFile(docFileKey(id), file);
-    dispatch({ type: 'content/doc/file', id, file: meta });
-    setMsg({ tone: 'good', text: `Uploaded “${file.name}” to ${docs.find((x) => x.id === id)?.short}.` });
+    const doc = docs.find((x) => x.id === id);
+    setMsg({ tone: 'info', text: `Uploading “${file.name}”…` });
+    try {
+      const meta = await api.uploadDocFile(doc, file);
+      await api.saveDoc({ ...doc, file: meta });
+      if (doc.file?.path) await api.removeDocFile(doc);
+      dispatch({ type: 'content/doc/file', id, file: meta });
+      setMsg({ tone: 'good', text: `Uploaded “${file.name}” to ${doc.short}.` });
+    } catch (err) {
+      setMsg({ tone: 'bad', text: `Upload failed: ${err.message}` });
+    }
   };
 
   return (
@@ -453,8 +522,8 @@ function RepositoryAdmin() {
         <Button onClick={() => setEditing('new')}><Plus size={16} /> Add document</Button>
       </div>
       {msg && (
-        <div className={`rounded-lg px-4 py-2.5 text-[13px] flex items-center gap-2 ${msg.tone === 'good' ? 'bg-good-soft text-good' : 'bg-bad-soft text-bad'}`} role="status">
-          {msg.tone === 'good' ? <CheckCircle2 size={15} /> : <AlertTriangle size={15} />}
+        <div className={`rounded-lg px-4 py-2.5 text-[13px] flex items-center gap-2 ${msg.tone === 'good' ? 'bg-good-soft text-good' : msg.tone === 'info' ? 'bg-navy-50 text-navy-700' : 'bg-bad-soft text-bad'}`} role="status">
+          {msg.tone === 'good' ? <CheckCircle2 size={15} /> : msg.tone === 'info' ? <Upload size={15} /> : <AlertTriangle size={15} />}
           <span className="flex-1">{msg.text}</span>
           <button type="button" onClick={() => setMsg(null)} aria-label="Dismiss"><X size={15} /></button>
         </div>
@@ -499,8 +568,12 @@ function RepositoryAdmin() {
                         text="Delete document?"
                         onNo={() => setDel(null)}
                         onYes={async () => {
-                          await deleteFile(docFileKey(doc.id));
-                          dispatch({ type: 'content/doc/delete', id: doc.id });
+                          try {
+                            await api.deleteDoc(doc, state.content);
+                            dispatch({ type: 'content/doc/delete', id: doc.id });
+                          } catch (err) {
+                            setMsg({ tone: 'bad', text: `Delete failed: ${err.message}` });
+                          }
                           setDel(null);
                         }}
                       />
@@ -531,13 +604,26 @@ function DocViewer({ id, onClose, onUpload }) {
   const doc = state.content.docs.find((d) => d.id === id);
   const [url, setUrl] = useState(null);
   const [confirmRm, setConfirmRm] = useState(false);
+  const [loadErr, setLoadErr] = useState('');
   useEffect(() => {
     let u = null;
     let alive = true;
-    if (doc?.file) objectUrl(docFileKey(id)).then((x) => { u = x; if (alive) setUrl(x); });
-    else setUrl(null);
-    return () => { alive = false; if (u) URL.revokeObjectURL(u); };
-  }, [id, doc?.file?.uploadedAt]);
+    setLoadErr('');
+    if (doc?.file) {
+      api
+        .docBlob(doc)
+        .then((blob) => {
+          if (!blob || !alive) return;
+          u = URL.createObjectURL(blob.type ? blob : new Blob([blob], { type: doc.file.type || 'application/pdf' }));
+          setUrl(u);
+        })
+        .catch((e) => alive && setLoadErr(e.message));
+    } else setUrl(null);
+    return () => {
+      alive = false;
+      if (u) URL.revokeObjectURL(u);
+    };
+  }, [id, doc?.file?.uploadedAt]); // eslint-disable-line react-hooks/exhaustive-deps
   if (!doc) return null;
   const isPdf = doc.file && (doc.file.type === 'application/pdf' || /\.pdf$/i.test(doc.file.name));
   const st = STATUS[doc.status];
@@ -575,8 +661,13 @@ function DocViewer({ id, onClose, onUpload }) {
                     yes="Remove"
                     onNo={() => setConfirmRm(false)}
                     onYes={async () => {
-                      await deleteFile(docFileKey(doc.id));
-                      dispatch({ type: 'content/doc/file', id: doc.id, file: null });
+                      try {
+                        await api.saveDoc({ ...doc, file: null });
+                        await api.removeDocFile(doc);
+                        dispatch({ type: 'content/doc/file', id: doc.id, file: null });
+                      } catch (e) {
+                        setLoadErr(e.message);
+                      }
                       setConfirmRm(false);
                     }}
                   />
@@ -592,7 +683,9 @@ function DocViewer({ id, onClose, onUpload }) {
           ) : (
             <div className="m-auto text-center px-6 py-10 max-w-sm">
               <FileText size={30} className="mx-auto text-navy-300" aria-hidden="true" />
-              <div className="font-semibold text-ink mt-3">{doc.file ? 'Preview not available for this file type' : 'No document uploaded yet'}</div>
+              <div className="font-semibold text-ink mt-3">
+                {loadErr ? `Could not load the file: ${loadErr}` : doc.file ? (isPdf ? 'Loading preview…' : 'Preview not available for this file type') : 'No document uploaded yet'}
+              </div>
               <p className="text-[13px] text-muted mt-1">
                 {doc.file ? 'Use Unduh Dokumen to open it.' : 'Upload the official PDF so learners can download it from the repository.'}
               </p>
@@ -649,16 +742,15 @@ function DocEditor({ doc, onClose }) {
     setErrors(e);
     if (Object.keys(e).length) return;
     setSaving(true);
+    try {
     let id = f.id;
     if (isNew) {
       const base = f.short.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'doc';
       id = state.content.docs.some((x) => x.id === base) ? uid(base) : base;
     }
     let fileMeta = doc?.file || null;
-    if (file) fileMeta = await putFile(docFileKey(id), file);
-    dispatch({
-      type: 'content/doc/save',
-      doc: {
+    if (file) fileMeta = await api.uploadDocFile({ id }, file);
+    const saved = {
         id,
         short: f.short.trim(),
         title: f.title.trim(),
@@ -673,10 +765,16 @@ function DocEditor({ doc, onClose }) {
         status: f.status,
         note: f.note.trim(),
         file: fileMeta,
-      },
-    });
+    };
+    await api.saveDoc(saved);
+    if (file && doc?.file?.path) await api.removeDocFile(doc);
+    dispatch({ type: 'content/doc/save', doc: saved });
     setSaving(false);
     onClose();
+    } catch (err) {
+      setSaving(false);
+      setErrors((p) => ({ ...p, _save: err.message || 'Could not save. Try again.' }));
+    }
   };
 
   return (
@@ -687,7 +785,7 @@ function DocEditor({ doc, onClose }) {
       onClose={onClose}
       footer={
         <>
-          {Object.keys(errors).length > 0 && <span className="mr-auto text-[12.5px] text-bad flex items-center gap-1.5"><AlertTriangle size={14} /> Fix the highlighted fields.</span>}
+          {Object.keys(errors).length > 0 && <span className="mr-auto text-[12.5px] text-bad flex items-center gap-1.5"><AlertTriangle size={14} /> {errors._save || 'Fix the highlighted fields.'}</span>}
           <Button variant="outline" onClick={onClose}>Cancel</Button>
           <Button onClick={save} disabled={saving}><Save size={15} /> {saving ? 'Saving…' : 'Save document'}</Button>
         </>
@@ -774,6 +872,7 @@ function QuizAdmin() {
   const [del, setDel] = useState(null);
   const [pass, setPass] = useState(state.content.settings.passingPct);
   const [saved, setSaved] = useState(false);
+  const op = useOp();
   const qs = state.content.questions;
   const list = comp === 'all' ? qs : qs.filter((q) => q.comp === comp);
   const passValid = Number.isInteger(Number(pass)) && Number(pass) >= 1 && Number(pass) <= 100;
@@ -786,11 +885,14 @@ function QuizAdmin() {
         </Field>
         <Button
           variant="navy"
-          disabled={!passValid || Number(pass) === state.content.settings.passingPct}
-          onClick={() => {
-            dispatch({ type: 'content/settings', settings: { passingPct: Number(pass) } });
-            setSaved(true);
-          }}
+          disabled={!passValid || Number(pass) === state.content.settings.passingPct || op.busy}
+          onClick={() =>
+            op.run(async () => {
+              await api.saveSettings({ passingPct: Number(pass) });
+              dispatch({ type: 'content/settings', settings: { passingPct: Number(pass) } });
+              setSaved(true);
+            })
+          }
         >
           <Save size={15} /> Save pass mark
         </Button>
@@ -800,6 +902,7 @@ function QuizAdmin() {
         </p>
       </Card>
 
+      <OpError error={op.error} onClose={() => op.setError('')} />
       <div className="flex flex-wrap items-center gap-2">
         {[{ id: 'all', label: 'All', n: qs.length }, ...COMPETENCIES.map((c) => ({ id: c.id, label: c.label, n: qs.filter((q) => q.comp === c.id).length }))].map((c) => (
           <button
@@ -843,7 +946,17 @@ function QuizAdmin() {
                     </div>
                     <div className="flex items-center gap-1.5 ml-auto">
                       {del === q.id ? (
-                        <ConfirmInline text="Delete question?" onNo={() => setDel(null)} onYes={() => { dispatch({ type: 'content/question/delete', id: q.id }); setDel(null); }} />
+                        <ConfirmInline
+                          text="Delete question?"
+                          onNo={() => setDel(null)}
+                          onYes={() =>
+                            op.run(async () => {
+                              await api.deleteQuestion(q.id);
+                              dispatch({ type: 'content/question/delete', id: q.id });
+                              setDel(null);
+                            })
+                          }
+                        />
                       ) : (
                         <>
                           <Button size="sm" variant="outline" onClick={() => setEditing(q)}><Pencil size={14} /> Edit</Button>
@@ -878,7 +991,8 @@ function QuestionEditor({ question, defaultComp, onClose }) {
   const [errors, setErrors] = useState({});
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
 
-  const save = () => {
+  const [saving, setSaving] = useState(false);
+  const save = async () => {
     const e = {};
     if (!f.q.trim()) e.q = 'Enter the question.';
     const opts = f.options.map((o) => o.trim());
@@ -888,8 +1002,17 @@ function QuestionEditor({ question, defaultComp, onClose }) {
     if (!f.why.trim()) e.why = 'Explain why the answer is correct.';
     setErrors(e);
     if (Object.keys(e).length) return;
-    dispatch({ type: 'content/question/save', question: { id: f.id, comp: f.comp, q: f.q.trim(), options: opts, answer: f.answer, why: f.why.trim(), ref: f.ref } });
-    onClose();
+    const question = { id: f.id, comp: f.comp, q: f.q.trim(), options: opts, answer: f.answer, why: f.why.trim(), ref: f.ref };
+    const idx = state.content.questions.findIndex((x) => x.id === f.id);
+    setSaving(true);
+    try {
+      await api.saveQuestion(question, idx >= 0 ? idx : state.content.questions.length);
+      dispatch({ type: 'content/question/save', question });
+      onClose();
+    } catch (err) {
+      setErrors({ _save: err.message || 'Could not save. Try again.' });
+      setSaving(false);
+    }
   };
 
   const removeOpt = (i) =>
@@ -902,9 +1025,9 @@ function QuestionEditor({ question, defaultComp, onClose }) {
       onClose={onClose}
       footer={
         <>
-          {Object.keys(errors).length > 0 && <span className="mr-auto text-[12.5px] text-bad flex items-center gap-1.5"><AlertTriangle size={14} /> Fix the highlighted fields.</span>}
+          {Object.keys(errors).length > 0 && <span className="mr-auto text-[12.5px] text-bad flex items-center gap-1.5"><AlertTriangle size={14} /> {errors._save || 'Fix the highlighted fields.'}</span>}
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={save}><Save size={15} /> Save question</Button>
+          <Button onClick={save} disabled={saving}><Save size={15} /> {saving ? 'Saving…' : 'Save question'}</Button>
         </>
       }
     >

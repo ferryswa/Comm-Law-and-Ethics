@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { LogIn, Eye, EyeOff, ShieldCheck, Info } from 'lucide-react';
-import { useStore, USERS } from '../state/store.jsx';
+import { LogIn, Eye, EyeOff, ShieldCheck, Info, Database } from 'lucide-react';
+import { useStore, REMOTE } from '../state/store.jsx';
+import { api } from '../state/backend.js';
 import hero from '../assets/hero.webp';
 
 export default function Login() {
@@ -9,17 +10,23 @@ export default function Login() {
   const [password, setPassword] = useState('');
   const [show, setShow] = useState(false);
   const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
 
-  const submit = (e) => {
+  const submit = async (e) => {
     e.preventDefault();
-    const u = USERS.find((x) => x.username === username.trim().toLowerCase() && x.password === password);
-    if (!u) {
-      setError('Incorrect username or password. Try admin / admin.');
+    if (!username.trim() || !password) {
+      setError('Enter your username and password.');
       return;
     }
-    const { password: _pw, ...session } = u;
-    dispatch({ type: 'session/login', session: { ...session, at: new Date().toISOString() } });
-    if (!window.location.hash) window.location.hash = 'dashboard';
+    setBusy(true);
+    try {
+      const session = await api.signIn(username, password);
+      dispatch({ type: 'session/login', session: { ...session, at: new Date().toISOString() } });
+      if (!window.location.hash) window.location.hash = 'dashboard';
+    } catch (err) {
+      setError(err.message || 'Sign-in failed. Check your connection and try again.');
+      setBusy(false);
+    }
   };
 
   return (
@@ -78,8 +85,8 @@ export default function Login() {
                 {error}
               </div>
             )}
-            <button type="submit" className="h-11 rounded-lg bg-brand-red text-white font-semibold text-[14.5px] hover:bg-brand-red-dark inline-flex items-center justify-center gap-2">
-              <LogIn size={17} /> Sign in
+            <button type="submit" disabled={busy} className="h-11 rounded-lg bg-brand-red text-white font-semibold text-[14.5px] hover:bg-brand-red-dark disabled:opacity-60 inline-flex items-center justify-center gap-2">
+              <LogIn size={17} /> {busy ? 'Signing in…' : 'Sign in'}
             </button>
             <div className="rounded-lg bg-navy-50 border border-navy-100 px-3.5 py-3 text-[12.5px] text-navy-700 grid gap-1">
               <div className="flex items-center gap-1.5 font-semibold">
@@ -94,8 +101,17 @@ export default function Login() {
             </div>
           </form>
           <p className="mt-4 flex gap-1.5 text-[12px] text-muted max-w-[420px]">
-            <Info size={14} className="shrink-0 mt-px" aria-hidden="true" />
-            Prototype sign-in for demonstration only. Credentials are checked in the browser and are not secure authentication.
+            {REMOTE ? (
+              <>
+                <Database size={14} className="shrink-0 mt-px" aria-hidden="true" />
+                Connected to Supabase. Content, uploaded documents, and learner progress are stored on the server and shared across devices.
+              </>
+            ) : (
+              <>
+                <Info size={14} className="shrink-0 mt-px" aria-hidden="true" />
+                Offline preview: credentials are checked in the browser and data stays on this device.
+              </>
+            )}
           </p>
         </div>
       </div>

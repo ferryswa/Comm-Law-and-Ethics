@@ -1,18 +1,15 @@
-import React, { createContext, useContext, useEffect, useMemo, useReducer } from 'react';
+import React, { createContext, useContext, useEffect, useMemo, useReducer, useRef } from 'react';
 import { LESSONS, COMPETENCIES } from '../data/lessons.js';
 import { QUESTIONS, SAMPLE_ATTEMPT_ANSWERS, scoreAnswers, PASSING_PCT } from '../data/quiz.js';
 import { ESSAYS, SAMPLE_ESSAY_TEXT, MIN_WORDS } from '../data/essays.js';
 import { DOCS } from '../data/legal.js';
+import { api, REMOTE } from './backend.js';
 
 const KEYS = { progress: 'kompas-hub-progress-v3', content: 'kompas-hub-content-v1', session: 'kompas-hub-session-v1' };
 const QUIZ_MINUTES = 15;
 const ESSAY_MINUTES = 20;
 
-// Demo accounts (client-side only, not real authentication)
-export const USERS = [
-  { username: 'admin', password: 'admin', name: 'Administrator', role: 'admin', title: 'LMS Administrator' },
-  { username: 'learner', password: 'learner', name: 'Demo Learner', role: 'learner', title: 'Digital Desk Reporter' },
-];
+export { REMOTE };
 
 const dayKey = (d) => {
   const x = new Date(d);
@@ -39,7 +36,7 @@ export function seedContent() {
   };
 }
 
-function seedProgress() {
+export function seedProgress() {
   const sampleScore = scoreAnswers(SAMPLE_ATTEMPT_ANSWERS, QUESTIONS, PASSING_PCT);
   return {
     version: 3,
@@ -104,12 +101,21 @@ function write(key, value) {
 }
 
 function load() {
+  if (REMOTE) {
+    // Supabase: session, content and progress arrive asynchronously
+    return { boot: 'loading', ready: false, syncError: null, session: null, content: seedContent(), ...seedProgress() };
+  }
   return {
+    boot: 'done',
+    ready: true,
+    syncError: null,
     session: read(KEYS.session, (v) => v && v.username),
     content: read(KEYS.content, (v) => v && v.version === 1) || seedContent(),
     ...(read(KEYS.progress, (v) => v && v.version === 3) || seedProgress()),
   };
 }
+
+const progressOf = (state) => ({ version: 3, lessons: state.lessons, quiz: state.quiz, essays: state.essays, activity: state.activity, ui: state.ui });
 
 function logActivity(state, minutes, label) {
   if (minutes <= 0) return state.activity;
@@ -129,9 +135,17 @@ function reducer(state, action) {
   switch (action.type) {
     // ---- session ----
     case 'session/login':
-      return { ...state, session: action.session };
+      return { ...state, session: action.session, ready: !REMOTE, syncError: null };
     case 'session/logout':
-      return { ...state, session: null };
+      return { ...state, session: null, ready: !REMOTE };
+    case 'boot/done':
+      return { ...state, boot: 'done', session: action.session || null };
+    case 'remote/loaded':
+      return { ...state, content: action.content, ...(action.progress?.version === 3 ? action.progress : seedProgress()), ready: true, syncError: null };
+    case 'sync/error':
+      return { ...state, syncError: action.message };
+    case 'content/replace':
+      return { ...state, content: action.content };
 
     // ---- learner progress ----
     case 'video/progress': {
@@ -308,12 +322,55 @@ const StoreCtx = createContext(null);
 
 export function StoreProvider({ children }) {
   const [state, dispatch] = useReducer(reducer, undefined, load);
-  const { session, content, ...progress } = state;
-  useEffect(() => write(KEYS.session, session), [session]);
-  useEffect(() => write(KEYS.content, content), [content]);
-  useEffect(() => write(KEYS.progress, progress), [state.lessons, state.quiz, state.essays, state.activity, state.ui]); // eslint-disable-line react-hooks/exhaustive-deps
+  const { session, content } = state;
+  const userId = session?.userId;
+
+  // ---- local mode: persist everything in this browser ----
+  useEffect(() => {
+    if (!REMOTE) write(KEYS.session, session);
+  }, [session]);
+  useEffect(() => {
+    if (!REMOTE) write(KEYS.content, content);
+  }, [content]);
+  useEffect(() => {
+    if (!REMOTE) write(KEYS.progress, progressOf(state));
+  }, [state.lessons, state.quiz, state.essays, state.activity, state.ui]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ---- Supabase mode: restore session, load content + progress, save progress ----
+  useEffect(() => {
+    if (!REMOTE) return undefined;
+    api.restore().then((s) => dispatch({ type: 'boot/done', session: s })).catch(() => dispatch({ type: 'boot/done', session: null }));
+    return api.onAuthChange((event) => {
+      if (event === 'SIGNED_OUT') dispatch({ type: 'session/logout' });
+    });
+  }, []);
+
+  const [reloadKey, setReloadKey] = React.useState(0);
+  useEffect(() => {
+    if (!REMOTE || !userId) return undefined;
+    let alive = true;
+    Promise.all([api.loadContent(), api.loadProgress(userId)])
+      .then(([c, p]) => alive && dispatch({ type: 'remote/loaded', content: c, progress: p }))
+      .catch((e) => alive && dispatch({ type: 'sync/error', message: e.message }));
+    return () => {
+      alive = false;
+    };
+  }, [userId, reloadKey]);
+
+  const saveTimer = useRef(null);
+  useEffect(() => {
+    if (!REMOTE || !userId || !state.ready) return undefined;
+    clearTimeout(saveTimer.current);
+    const snapshot = progressOf(state);
+    saveTimer.current = setTimeout(() => {
+      api.saveProgress(userId, snapshot).catch((e) => dispatch({ type: 'sync/error', message: `Progress not saved: ${e.message}` }));
+    }, 1200);
+    return () => clearTimeout(saveTimer.current);
+  }, [userId, state.ready, state.lessons, state.quiz, state.essays, state.activity]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const reload = () => setReloadKey((k) => k + 1);
   const d = useMemo(() => derive(state), [state]);
-  return <StoreCtx.Provider value={{ state, dispatch, d }}>{children}</StoreCtx.Provider>;
+  return <StoreCtx.Provider value={{ state, dispatch, d, reload }}>{children}</StoreCtx.Provider>;
 }
 
 export const useStore = () => useContext(StoreCtx);
