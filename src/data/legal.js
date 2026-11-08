@@ -99,10 +99,10 @@ export const DOCS = [
     description:
       'Sebelas pasal etika wartawan Indonesia: independensi dan akurasi, cara profesional, uji informasi, larangan berita bohong dan fitnah, perlindungan identitas korban susila dan anak, larangan suap, Hak Tolak, ralat, serta pelayanan Hak Jawab.',
     keyPoints: ['Pasal 1: independen, akurat, berimbang', 'Pasal 3: uji informasi, praduga tak bersalah', 'Pasal 5: identitas korban susila dan anak', 'Pasal 10–11: ralat dan Hak Jawab'],
-    source: 'Dewan Pers (dewanpers.or.id)',
-    url: 'https://dewanpers.or.id/',
+    source: 'JDIH Dewan Pers (jdih.dewanpers.or.id)',
+    url: 'https://jdih.dewanpers.or.id/dokumen/peraturan/peraturan-dewan-pers-nomor-6peraturan-dpv2008-tentang-pengesahan-surat-keputusan-dewan-pers-n',
     status: 'partial',
-    note: 'Nomor peraturan terkonfirmasi dari konsiderans Peraturan Dewan Pers No. 03/Peraturan-DP/IV/2024. Tautan menuju beranda resmi; tautan langsung ke naskah KEJ belum dicek.',
+    note: 'Nomor peraturan terkonfirmasi dari konsiderans Peraturan Dewan Pers No. 03/Peraturan-DP/IV/2024. Naskah PDF resmi tersedia di JDIH Dewan Pers; ringkasan pasal di sini belum dicocokkan per pasal dengan naskah.',
   },
   {
     id: 'ppms-2012',
@@ -115,10 +115,10 @@ export const DOCS = [
     description:
       'Pedoman khusus media siber: verifikasi dan keberimbangan, Isi Buatan Pengguna, ralat dan Hak Jawab yang ditautkan, pencabutan berita, pembedaan iklan, dan penyelesaian sengketa oleh Dewan Pers.',
     keyPoints: ['Butir 2: verifikasi dan pengecualiannya', 'Butir 3: Isi Buatan Pengguna, 2 x 24 jam', 'Butir 4: ralat, koreksi, Hak Jawab ditautkan', 'Butir 5: pencabutan berita'],
-    source: 'Dewan Pers (dewanpers.or.id)',
-    url: 'https://dewanpers.or.id/',
+    source: 'JDIH Dewan Pers (jdih.dewanpers.or.id)',
+    url: 'https://storage.dewanpers.or.id/jdih-prod/documents/lampiran/2012peraturan001.pdf',
     status: 'partial',
-    note: 'Nomor peraturan terkonfirmasi dari konsiderans Peraturan Dewan Pers No. 03/Peraturan-DP/IV/2024; isi butir dicocokkan dengan salinan yang dimuat media. Tautan langsung ke PDF naskah belum dicek.',
+    note: 'Nomor peraturan terkonfirmasi dari konsiderans Peraturan Dewan Pers No. 03/Peraturan-DP/IV/2024; isi butir dicocokkan dengan salinan yang dimuat media. Naskah PDF resmi tersedia di JDIH Dewan Pers.',
   },
   {
     id: 'dp-3-2024',
@@ -131,10 +131,10 @@ export const DOCS = [
     description:
       'Pedoman perilaku bagi wartawan dan perusahaan pers profesional, termasuk kewajiban menaati UU Pers, KEJ, dan peraturan Dewan Pers serta memisahkan bidang redaksi dan bisnis.',
     keyPoints: ['Kewajiban wartawan profesional', 'Pemisahan redaksi dan bisnis', 'Merujuk KEJ 2008 dan PPMS 2012'],
-    source: 'Dewan Pers (dewanpers.or.id)',
-    url: 'https://dewanpers.or.id/assets/documents/peraturan/2406190559_3-Peraturan_DP_Pedoman_Perilaku_dan_Standar_Pers_Profesional.pdf',
+    source: 'JDIH Dewan Pers (jdih.dewanpers.or.id)',
+    url: 'https://jdih.dewanpers.or.id/dokumen/peraturan/peraturan-dewan-pers-nomor-03peraturan-dpiv2024-tentang-pedoman-perilaku-dan-standar-pers-pro',
     status: 'verified',
-    note: 'Naskah PDF dicek pada situs resmi Dewan Pers.',
+    note: 'Naskah PDF dicek pada situs resmi Dewan Pers. Tautan lama di dewanpers.or.id/assets tidak aktif lagi (dicek 8 November 2026); kini dimuat di JDIH Dewan Pers.',
   },
   {
     id: 'mk-50-2008',
@@ -150,7 +150,7 @@ export const DOCS = [
     source: 'Mahkamah Konstitusi (mkri.id) · Majalah Konstitusi Edisi Mei 2009',
     url: 'https://mkri.id/public/content/infoumum/majalahkonstitusi/pdf/BMK%20Edisi%20Mei%202009.pdf',
     status: 'partial',
-    note: 'Amar dan tanggal terkonfirmasi dari publikasi MK dan media hukum. Naskah putusan lengkap belum dibaca langsung.',
+    note: 'Amar dan tanggal terkonfirmasi dari publikasi MK dan media hukum. Naskah putusan resmi kini tersimpan dari mkri.id, tetapi ringkasan di sini belum dicocokkan langsung dengan naskah.',
   },
   {
     id: 'mk-78-2023',
@@ -214,7 +214,7 @@ export const DOCS = [
     source: 'Mahkamah Konstitusi (mkri.id) · berita putusan; ringkasan amar dari Hukumonline',
     url: 'https://www.mkri.id/berita/mk:-pemberian-perlindungan-hukum-kepada-wartawan-merupakan-instrumen-konstitusional-24387',
     status: 'partial',
-    note: 'Rumusan amar di sini adalah ringkasan laporan media hukum. Baca naskah putusan di mkri.id sebelum mengutip kata per kata.',
+    note: 'Rumusan amar di sini adalah ringkasan laporan media hukum. Naskah putusan resmi tersedia lewat tombol Unduh Dokumen; baca naskah itu sebelum mengutip kata per kata.',
   },
   {
     id: 'mk-192-2025',
@@ -235,3 +235,25 @@ export const DOCS = [
 ];
 
 export const docById = (id) => DOCS.find((d) => d.id === id);
+
+// Naskah resmi yang dapat diambil admin lewat "Impor berkas resmi" (fungsi server import-document).
+// Semua tautan dicek dapat diunduh pada 8 November 2026. Situs JDIH BPK dan DPR menolak unduhan dari
+// server cloud, sehingga UU diambil dari salinan Wikimedia Commons yang mencantumkan sumber pemerintahnya.
+// MK 192/PUU-XXIII/2025 sengaja tidak dicantumkan karena belum terverifikasi.
+const WIKI = 'https://commons.wikimedia.org/wiki/Special:FilePath/';
+const JDIH_DP = 'Diunduh dari JDIH Dewan Pers (jdih.dewanpers.or.id)';
+const MKRI = 'Diunduh dari situs resmi Mahkamah Konstitusi (mkri.id)';
+export const OFFICIAL_FILES = {
+  'uu-40-1999': { url: `${WIKI}UU_Nomor_40_Tahun_1999.pdf`, provenance: 'Salinan peraturan.go.id (Kemenkumham), diambil melalui Wikimedia Commons' },
+  'uu-11-2008': { url: `${WIKI}UU-Nomor-11-Tahun-2008.pdf`, provenance: 'Salinan ANRI (anri.go.id), diambil melalui Wikimedia Commons' },
+  'uu-19-2016': { url: `${WIKI}Undang-Undang_Republik_Indonesia_Nomor_19_Tahun_2016.pdf`, provenance: 'Salinan Kominfo (kominfo.go.id), diambil melalui Wikimedia Commons' },
+  'uu-1-2024': { url: `${WIKI}Salinan_UU_Nomor_1_Tahun_2024.pdf`, provenance: 'Salinan JDIH Setneg (jdih.setneg.go.id), diambil melalui Wikimedia Commons' },
+  'kej-2008': { url: 'https://jdih.dewanpers.or.id/dokumen/peraturan/peraturan-dewan-pers-nomor-6peraturan-dpv2008-tentang-pengesahan-surat-keputusan-dewan-pers-n', provenance: JDIH_DP },
+  'ppms-2012': { url: 'https://storage.dewanpers.or.id/jdih-prod/documents/lampiran/2012peraturan001.pdf', provenance: JDIH_DP },
+  'dp-3-2024': { url: 'https://storage.dewanpers.or.id/jdih-prod/documents/lampiran/2024peraturan003.pdf', provenance: JDIH_DP },
+  'mk-50-2008': { url: 'https://www.mkri.id/public/content/persidangan/putusan/putusan_sidang_FINAL%20PUTUSAN%2050%20UU%20ITE%202008.pdf', provenance: MKRI },
+  'mk-78-2023': { url: 'https://mkri.id/public/content/persidangan/putusan/putusan_mkri_9709_1711005671.pdf', provenance: MKRI },
+  'mk-105-2024': { url: 'https://www.mkri.id/public/content/persidangan/putusan/putusan_mkri_12530_1745894606.pdf', provenance: MKRI },
+  'mk-115-2024': { url: 'https://s.mkri.id/public/content/persidangan/putusan/putusan_mkri_12531_1745895641.pdf', provenance: MKRI },
+  'mk-145-2025': { url: 'https://s.mkri.id/public/content/persidangan/putusan/putusan_mkri_13648_1768799912.pdf', provenance: MKRI },
+};

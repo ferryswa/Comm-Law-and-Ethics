@@ -221,6 +221,12 @@ function DocCard({ doc }) {
             </>
           )}
         </span>
+        {doc.file?.provenance && (
+          <span className="text-[12px] text-muted -mt-1">
+            <span className="font-semibold text-ink/80">Asal salinan:</span> {doc.file.provenance}
+            {doc.file.checkedOn && <> · dicek {doc.file.checkedOn}</>}
+          </span>
+        )}
         <DocActions doc={doc} lang="id" />
       </div>
     </article>

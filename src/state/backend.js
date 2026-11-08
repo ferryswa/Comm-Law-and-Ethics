@@ -147,6 +147,25 @@ const remote = {
     if (!doc.file?.path) return null;
     return check(await sb.storage.from('documents').download(doc.file.path));
   },
+  // Server-side fetch (Edge Function "import-document"): downloads a public PDF/DOC/DOCX, or the first
+  // matching document link on an HTML page, into the documents bucket and records it on the row.
+  async importDocFile(doc, { url, match, provenance }) {
+    const { data, error } = await sb.functions.invoke('import-document', { body: { docId: doc.id, url, ...(match ? { match } : {}) } });
+    if (error) {
+      let msg = error.message;
+      try {
+        const body = await error.context?.json();
+        if (body?.error) msg = body.error;
+      } catch {
+        /* keep generic message */
+      }
+      throw new Error(msg);
+    }
+    if (!data?.file) throw new Error(data?.error || 'The server did not return a file.');
+    const file = provenance ? { ...data.file, provenance, checkedOn: new Date().toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) } : data.file;
+    if (provenance) await remote.saveDoc({ ...doc, file });
+    return file;
+  },
 
   async saveQuestion(q, position) {
     check(await sb.from('questions').upsert(qToRow(q, position)));
@@ -225,6 +244,9 @@ const local = {
   },
   async docBlob(doc) {
     return (await files.getFile(files.docFileKey(doc.id)))?.blob || null;
+  },
+  async importDocFile() {
+    throw new Error('Import from URL needs the online version (Supabase). In this offline copy, download the file and use Upload.');
   },
   saveQuestion: noop,
   deleteQuestion: noop,

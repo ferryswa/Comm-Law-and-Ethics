@@ -1,12 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   BookOpen, Library, ListChecks, Plus, Pencil, Trash2, ArrowUp, ArrowDown, Upload, Eye, FileText, Film, RotateCcw,
-  Search, CheckCircle2, X, Save, AlertTriangle,
+  Search, CheckCircle2, X, Save, AlertTriangle, Globe, CloudDownload, Loader2,
 } from 'lucide-react';
 import { useStore, uid, seedContent } from '../state/store.jsx';
-import { api } from '../state/backend.js';
+import { api, REMOTE } from '../state/backend.js';
 import { COMPETENCIES } from '../data/lessons.js';
-import { CATEGORIES, TOPICS, STATUS } from '../data/legal.js';
+import { CATEGORIES, TOPICS, STATUS, OFFICIAL_FILES } from '../data/legal.js';
 import { formatBytes } from '../state/files.js';
 import { Card, PageTitle, Pill, Button, Modal, Field, inputCls, DocActions, Empty } from '../components/ui.jsx';
 
@@ -70,7 +70,11 @@ export default function Admin({ tab }) {
     <>
       <PageTitle
         title="Administration"
-        subtitle="Manage induction materials, legal repository documents, and the quiz bank. Changes are saved in this browser (prototype, no server)."
+        subtitle={
+          REMOTE
+            ? 'Manage induction materials, legal repository documents, and the quiz bank. Changes are saved to the shared database and file storage (Supabase) and are visible to every learner.'
+            : 'Manage induction materials, legal repository documents, and the quiz bank. Offline copy: changes are saved in this browser only.'
+        }
         right={
           confirmReset ? (
             <div className="flex flex-wrap items-center gap-2 text-[13px]">
@@ -99,12 +103,12 @@ export default function Admin({ tab }) {
         }
       />
       {op.error && <div className="mb-4"><OpError error={op.error} onClose={() => op.setError('')} /></div>}
-      <div className="grid grid-cols-3 gap-3 mb-6">
+      <div className="grid grid-cols-3 gap-2 sm:gap-3 mb-6">
         <Count icon={BookOpen} label="Lessons" value={c.lessons.length} />
-        <Count icon={Library} label="Documents" value={`${c.docs.length}`} hint={`${c.docs.filter((x) => x.file).length} with uploaded file`} />
+        <Count icon={Library} label="Documents" value={`${c.docs.length}`} hint={`${c.docs.filter((x) => x.file).length} with stored file`} />
         <Count icon={ListChecks} label="Quiz questions" value={c.questions.length} hint={`Pass mark ${c.settings.passingPct}%`} />
       </div>
-      <div role="tablist" aria-label="Administration sections" className="flex gap-1 border-b border-line mb-6 overflow-x-auto">
+      <div role="tablist" aria-label="Administration sections" className="flex gap-1 border-b border-line mb-6 overflow-x-auto -mx-1 px-1 [scrollbar-width:none]">
         {TABS.map((t) => {
           const Icon = t.icon;
           const active = t.id === tab;
@@ -114,7 +118,7 @@ export default function Admin({ tab }) {
               role="tab"
               aria-selected={active}
               href={`#${t.id}`}
-              className={`flex items-center gap-2 px-4 h-11 text-[14px] font-semibold whitespace-nowrap border-b-2 -mb-px transition-colors ${
+              className={`flex items-center gap-2 px-3 sm:px-4 h-11 text-[13px] sm:text-[14px] font-semibold whitespace-nowrap border-b-2 -mb-px transition-colors ${
                 active ? 'border-brand-red text-ink' : 'border-transparent text-muted hover:text-ink'
               }`}
             >
@@ -133,16 +137,17 @@ export default function Admin({ tab }) {
 
 function Count({ icon: Icon, label, value, hint }) {
   return (
-    <Card className="p-4 flex items-center gap-3">
-      <span className="w-10 h-10 rounded-lg bg-navy-50 text-navy-600 flex items-center justify-center shrink-0">
-        <Icon size={19} aria-hidden="true" />
+    <Card className="p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3">
+      <span className="w-8 h-8 sm:w-10 sm:h-10 rounded-lg bg-navy-50 text-navy-600 flex items-center justify-center shrink-0">
+        <Icon size={17} aria-hidden="true" />
       </span>
       <div className="min-w-0">
-        <div className="tabular text-[22px] font-bold text-ink leading-none">{value}</div>
-        <div className="text-[12px] text-muted mt-1 truncate">
+        <div className="tabular text-[20px] sm:text-[22px] font-bold text-ink leading-none">{value}</div>
+        <div className="text-[11.5px] sm:text-[12px] text-muted mt-1 leading-snug">
           {label}
-          {hint && <span className="hidden sm:inline"> · {hint}</span>}
+          {hint && <span className="hidden lg:inline"> · {hint}</span>}
         </div>
+        {hint && <div className="lg:hidden text-[11px] text-muted/90 leading-snug mt-0.5">{hint}</div>}
       </div>
     </Card>
   );
@@ -474,8 +479,10 @@ function RepositoryAdmin() {
   const [q, setQ] = useState('');
   const [editing, setEditing] = useState(null);
   const [viewing, setViewing] = useState(null);
+  const [importing, setImporting] = useState(null);
   const [del, setDel] = useState(null);
   const [msg, setMsg] = useState(null);
+  const [bulk, setBulk] = useState(null);
   const fileRef = useRef(null);
   const target = useRef(null);
   const docs = state.content.docs;
@@ -483,6 +490,7 @@ function RepositoryAdmin() {
     const t = q.trim().toLowerCase();
     return t ? docs.filter((d) => `${d.short} ${d.title} ${d.source}`.toLowerCase().includes(t)) : docs;
   }, [docs, q]);
+  const missing = docs.filter((d) => !d.file && OFFICIAL_FILES[d.id]);
 
   const pick = (id) => {
     target.current = id;
@@ -510,82 +518,144 @@ function RepositoryAdmin() {
     }
   };
 
+  const importAll = async () => {
+    const queue = missing;
+    const failed = [];
+    let done = 0;
+    setMsg(null);
+    for (const [i, doc] of queue.entries()) {
+      setBulk({ i: i + 1, n: queue.length, short: doc.short });
+      try {
+        const src = OFFICIAL_FILES[doc.id];
+        const file = await api.importDocFile(doc, src);
+        dispatch({ type: 'content/doc/file', id: doc.id, file });
+        done += 1;
+      } catch (err) {
+        failed.push(`${doc.short}: ${err.message}`);
+      }
+    }
+    setBulk(null);
+    setMsg(
+      failed.length
+        ? { tone: done ? 'info' : 'bad', text: `Imported ${done} of ${queue.length} official files. Not imported — ${failed.join(' · ')}` }
+        : { tone: 'good', text: `Imported ${done} official ${done === 1 ? 'file' : 'files'} into repository storage.` },
+    );
+  };
+
+  const fileCell = (doc) =>
+    doc.file ? (
+      <div className="text-[12.5px] min-w-0">
+        <div className="flex items-center gap-1.5 text-ink font-medium min-w-0">
+          <FileText size={14} className="text-navy-400 shrink-0" /> <span className="truncate" title={doc.file.name}>{doc.file.name}</span>
+        </div>
+        <div className="text-muted tabular">{formatBytes(doc.file.size)}{doc.file.sourceUrl ? ' · fetched from the web' : ' · uploaded'}</div>
+        {doc.file.provenance && <div className="text-muted leading-snug mt-0.5">{doc.file.provenance}</div>}
+      </div>
+    ) : (
+      <span className="text-[12.5px] text-muted">No file yet</span>
+    );
+
+  const actions = (doc) =>
+    del === doc.id ? (
+      <ConfirmInline
+        text="Delete document?"
+        onNo={() => setDel(null)}
+        onYes={async () => {
+          try {
+            await api.deleteDoc(doc, state.content);
+            dispatch({ type: 'content/doc/delete', id: doc.id });
+          } catch (err) {
+            setMsg({ tone: 'bad', text: `Delete failed: ${err.message}` });
+          }
+          setDel(null);
+        }}
+      />
+    ) : (
+      <>
+        <IconBtn label="View document" onClick={() => setViewing(doc)}><Eye size={15} /></IconBtn>
+        <Button size="sm" variant="outline" onClick={() => pick(doc.id)}><Upload size={14} /> {doc.file ? 'Replace' : 'Upload'}</Button>
+        {REMOTE && <IconBtn label="Import file from a web address" onClick={() => setImporting(doc)} disabled={!!bulk}><Globe size={15} /></IconBtn>}
+        <IconBtn label="Edit document" onClick={() => setEditing(doc)}><Pencil size={15} /></IconBtn>
+        <IconBtn label="Delete document" tone="bad" onClick={() => setDel(doc.id)}><Trash2 size={15} /></IconBtn>
+      </>
+    );
+
   return (
     <div className="grid gap-4">
       <input ref={fileRef} type="file" accept={DOC_ACCEPT} className="hidden" onChange={onFile} aria-hidden="true" tabIndex={-1} />
-      <div className="flex flex-wrap items-center gap-3">
-        <div className="relative flex-1 min-w-[240px]">
+      <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+        <div className="relative flex-1 min-w-[200px]">
           <label htmlFor="adm-doc-q" className="sr-only">Search documents</label>
           <Search size={16} className="absolute left-3 top-1/2 -translate-y-1/2 text-navy-400" aria-hidden="true" />
           <input id="adm-doc-q" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search documents" className={`${inputCls} pl-9 h-10`} />
         </div>
+        {REMOTE && (
+          <Button variant="outline" onClick={importAll} disabled={!!bulk || missing.length === 0} title={missing.length ? `Fetch ${missing.length} official files from their publishers` : 'Every listed official file is already stored'}>
+            {bulk ? <Loader2 size={16} className="animate-spin" /> : <CloudDownload size={16} />}
+            {bulk ? `Importing ${bulk.i}/${bulk.n}…` : `Import official files${missing.length ? ` (${missing.length})` : ''}`}
+          </Button>
+        )}
         <Button onClick={() => setEditing('new')}><Plus size={16} /> Add document</Button>
       </div>
+      {bulk && (
+        <div className="rounded-lg px-4 py-2.5 text-[13px] bg-navy-50 text-navy-700 flex items-center gap-2" role="status">
+          <Loader2 size={15} className="animate-spin" /> Fetching {bulk.short} from its publisher ({bulk.i} of {bulk.n})…
+        </div>
+      )}
       {msg && (
-        <div className={`rounded-lg px-4 py-2.5 text-[13px] flex items-center gap-2 ${msg.tone === 'good' ? 'bg-good-soft text-good' : msg.tone === 'info' ? 'bg-navy-50 text-navy-700' : 'bg-bad-soft text-bad'}`} role="status">
-          {msg.tone === 'good' ? <CheckCircle2 size={15} /> : msg.tone === 'info' ? <Upload size={15} /> : <AlertTriangle size={15} />}
+        <div className={`rounded-lg px-4 py-2.5 text-[13px] flex items-start gap-2 ${msg.tone === 'good' ? 'bg-good-soft text-good' : msg.tone === 'info' ? 'bg-navy-50 text-navy-700' : 'bg-bad-soft text-bad'}`} role="status">
+          <span className="mt-0.5">{msg.tone === 'good' ? <CheckCircle2 size={15} /> : msg.tone === 'info' ? <Upload size={15} /> : <AlertTriangle size={15} />}</span>
           <span className="flex-1">{msg.text}</span>
           <button type="button" onClick={() => setMsg(null)} aria-label="Dismiss"><X size={15} /></button>
         </div>
       )}
       <p className="text-[12.5px] text-muted">
-        Upload PDF, DOC, or DOCX (max {formatBytes(DOC_MAX)}). Learners get a <strong>Unduh Dokumen</strong> button next to <strong>Sumber Asli</strong> on each reference. Repository content is kept in Bahasa Indonesia (master).
+        Upload PDF, DOC, or DOCX (max {formatBytes(DOC_MAX)}){REMOTE ? ', or use the globe button to fetch the official file from a public web address straight into storage' : ''}. Learners get a <strong>Unduh Dokumen</strong> button next to <strong>Sumber Asli</strong> on each reference. Repository content is kept in Bahasa Indonesia (master).
       </p>
-      <Card className="overflow-x-auto">
-        <table className="w-full text-[13.5px] min-w-[820px]">
+
+      {/* Mobile: cards */}
+      <div className="grid gap-3 md:hidden">
+        {list.map((doc) => (
+          <Card key={doc.id} className="p-4 grid gap-3">
+            <div className="flex items-start gap-2">
+              <div className="min-w-0 flex-1">
+                <div className="text-[12px] font-bold text-brand-red">{doc.short}</div>
+                <div className="text-ink font-medium leading-snug text-[14px]">{doc.title}</div>
+              </div>
+              <Pill tone={STATUS[doc.status].tone}>{STATUS[doc.status].label}</Pill>
+            </div>
+            <div className="text-[12px] text-muted">{CATEGORIES.find((c) => c.id === doc.category)?.label}</div>
+            {fileCell(doc)}
+            <div className="flex flex-wrap items-center gap-1.5">{actions(doc)}</div>
+          </Card>
+        ))}
+        {list.length === 0 && <Card><Empty icon={Library} title="No documents match">Try another search or add a document.</Empty></Card>}
+      </div>
+
+      {/* Desktop: table */}
+      <Card className="overflow-x-auto hidden md:block">
+        <table className="w-full text-[13.5px] min-w-[860px]">
           <thead>
             <tr className="text-left text-[12px] text-muted border-b border-line bg-paper">
               <th className="font-semibold px-5 py-2.5">Document</th>
               <th className="font-semibold px-3 py-2.5">Category</th>
               <th className="font-semibold px-3 py-2.5">Verification</th>
-              <th className="font-semibold px-3 py-2.5">Uploaded file</th>
+              <th className="font-semibold px-3 py-2.5">Stored file</th>
               <th className="font-semibold px-5 py-2.5 text-right">Actions</th>
             </tr>
           </thead>
           <tbody>
             {list.map((doc) => (
               <tr key={doc.id} className="border-b border-line last:border-b-0 align-top">
-                <td className="px-5 py-3 max-w-[340px]">
+                <td className="px-5 py-3 max-w-[320px]">
                   <div className="text-[12px] font-bold text-brand-red">{doc.short}</div>
                   <div className="text-ink font-medium leading-snug">{doc.title}</div>
                 </td>
                 <td className="px-3 py-3 text-muted whitespace-nowrap">{CATEGORIES.find((c) => c.id === doc.category)?.label}</td>
                 <td className="px-3 py-3"><Pill tone={STATUS[doc.status].tone}>{STATUS[doc.status].label}</Pill></td>
-                <td className="px-3 py-3">
-                  {doc.file ? (
-                    <div className="text-[12.5px]">
-                      <div className="flex items-center gap-1.5 text-ink font-medium"><FileText size={14} className="text-navy-400" /> <span className="truncate max-w-[180px]" title={doc.file.name}>{doc.file.name}</span></div>
-                      <div className="text-muted tabular">{formatBytes(doc.file.size)}</div>
-                    </div>
-                  ) : (
-                    <span className="text-[12.5px] text-muted">—</span>
-                  )}
-                </td>
+                <td className="px-3 py-3 max-w-[230px]">{fileCell(doc)}</td>
                 <td className="px-5 py-3">
-                  <div className="flex items-center justify-end gap-1.5">
-                    {del === doc.id ? (
-                      <ConfirmInline
-                        text="Delete document?"
-                        onNo={() => setDel(null)}
-                        onYes={async () => {
-                          try {
-                            await api.deleteDoc(doc, state.content);
-                            dispatch({ type: 'content/doc/delete', id: doc.id });
-                          } catch (err) {
-                            setMsg({ tone: 'bad', text: `Delete failed: ${err.message}` });
-                          }
-                          setDel(null);
-                        }}
-                      />
-                    ) : (
-                      <>
-                        <IconBtn label="View document" onClick={() => setViewing(doc)}><Eye size={15} /></IconBtn>
-                        <Button size="sm" variant="outline" onClick={() => pick(doc.id)}><Upload size={14} /> {doc.file ? 'Replace' : 'Upload'}</Button>
-                        <IconBtn label="Edit document" onClick={() => setEditing(doc)}><Pencil size={15} /></IconBtn>
-                        <IconBtn label="Delete document" tone="bad" onClick={() => setDel(doc.id)}><Trash2 size={15} /></IconBtn>
-                      </>
-                    )}
-                  </div>
+                  <div className="flex items-center justify-end gap-1.5">{actions(doc)}</div>
                 </td>
               </tr>
             ))}
@@ -593,13 +663,84 @@ function RepositoryAdmin() {
         </table>
         {list.length === 0 && <Empty icon={Library} title="No documents match">Try another search or add a document.</Empty>}
       </Card>
-      {editing && <DocEditor doc={editing === 'new' ? null : editing} onClose={() => setEditing(null)} />}
-      {viewing && <DocViewer id={viewing.id} onClose={() => setViewing(null)} onUpload={() => pick(viewing.id)} />}
+      {editing && <DocEditor doc={editing === 'new' ? null : editing} onClose={() => setEditing(null)} onMessage={setMsg} />}
+      {viewing && <DocViewer id={viewing.id} onClose={() => setViewing(null)} onUpload={() => pick(viewing.id)} onImport={REMOTE ? () => { setImporting(docs.find((d) => d.id === viewing.id)); setViewing(null); } : null} />}
+      {importing && (
+        <ImportDialog
+          doc={importing}
+          onClose={() => setImporting(null)}
+          onDone={(file) => {
+            dispatch({ type: 'content/doc/file', id: importing.id, file });
+            setMsg({ tone: 'good', text: `Stored “${file.name}” (${formatBytes(file.size)}) for ${importing.short}.` });
+            setImporting(null);
+          }}
+        />
+      )}
     </div>
   );
 }
 
-function DocViewer({ id, onClose, onUpload }) {
+function ImportDialog({ doc, onClose, onDone }) {
+  const preset = OFFICIAL_FILES[doc.id];
+  const [url, setUrl] = useState(preset?.url || doc.file?.sourceUrl || doc.url || '');
+  const [match, setMatch] = useState('');
+  const [provenance, setProvenance] = useState(doc.file?.provenance || preset?.provenance || '');
+  const [err, setErr] = useState('');
+  const [busy, setBusy] = useState(false);
+  const run = async () => {
+    const u = url.trim();
+    if (!/^https?:\/\/\S+$/i.test(u)) {
+      setErr('Enter a public link starting with https://');
+      return;
+    }
+    setErr('');
+    setBusy(true);
+    try {
+      const file = await api.importDocFile(doc, { url: u, match: match.trim(), provenance: provenance.trim() });
+      onDone(file);
+    } catch (e) {
+      setErr(e.message || 'The file could not be fetched.');
+      setBusy(false);
+    }
+  };
+  return (
+    <Modal
+      title={`Import file for ${doc.short}`}
+      subtitle="The server fetches the document from a public web address and saves it in repository storage."
+      onClose={busy ? () => {} : onClose}
+      footer={
+        <>
+          {err && <span className="mr-auto text-[12.5px] text-bad flex items-start gap-1.5"><AlertTriangle size={14} className="mt-0.5 shrink-0" /> {err}</span>}
+          <Button variant="outline" onClick={onClose} disabled={busy}>Cancel</Button>
+          <Button onClick={run} disabled={busy}>
+            {busy ? <Loader2 size={15} className="animate-spin" /> : <CloudDownload size={15} />} {busy ? 'Fetching…' : doc.file ? 'Fetch and replace' : 'Fetch and save'}
+          </Button>
+        </>
+      }
+    >
+      <div className="grid gap-4">
+        {preset && (
+          <div className="rounded-lg bg-good-soft text-good px-3 py-2 text-[12.5px] flex items-start gap-2">
+            <CheckCircle2 size={14} className="mt-0.5 shrink-0" />
+            <span>Pre-filled with the official file checked for this entry ({preset.provenance}).</span>
+          </div>
+        )}
+        <Field label="Web address of the file or its page" htmlFor="imp-url" hint="A direct PDF/DOC/DOCX link, or a page that links to one (the first matching link is used). Max 25 MB.">
+          <input id="imp-url" className={inputCls} value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://" disabled={busy} />
+        </Field>
+        <Field label="Only follow links containing (optional)" htmlFor="imp-match" hint="For pages with several downloads, e.g. “50 PUU-VI 2008”.">
+          <input id="imp-match" className={inputCls} value={match} onChange={(e) => setMatch(e.target.value)} disabled={busy} />
+        </Field>
+        <Field label="Where the copy comes from (shown to learners)" htmlFor="imp-prov" hint="Name the publisher, e.g. “Diunduh dari situs resmi Mahkamah Konstitusi (mkri.id)”. Prefer official publishers.">
+          <input id="imp-prov" className={inputCls} value={provenance} onChange={(e) => setProvenance(e.target.value)} disabled={busy} />
+        </Field>
+        {doc.file && <p className="text-[12.5px] text-muted">The current file ({doc.file.name}) is replaced only after the new one is stored.</p>}
+      </div>
+    </Modal>
+  );
+}
+
+function DocViewer({ id, onClose, onUpload, onImport }) {
   const { state, dispatch } = useStore();
   const doc = state.content.docs.find((d) => d.id === id);
   const [url, setUrl] = useState(null);
@@ -637,13 +778,27 @@ function DocViewer({ id, onClose, onUpload }) {
           <Meta k="Source" v={doc.source} />
           <Meta k="Note" v={doc.note} />
           <Meta
-            k="Uploaded file"
+            k="Stored file"
             v={
               doc.file ? (
-                <span>
+                <span className="break-words">
                   {doc.file.name} · {formatBytes(doc.file.size)}
                   <br />
-                  <span className="text-muted">{new Date(doc.file.uploadedAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}</span>
+                  <span className="text-muted">
+                    {doc.file.sourceUrl ? 'Fetched' : 'Uploaded'} {new Date(doc.file.uploadedAt).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' })}
+                  </span>
+                  {doc.file.provenance && (
+                    <>
+                      <br />
+                      <span className="text-muted">{doc.file.provenance}</span>
+                    </>
+                  )}
+                  {doc.file.sourceUrl && (
+                    <>
+                      <br />
+                      <a href={doc.file.sourceUrl} target="_blank" rel="noreferrer" className="text-navy-600 underline break-all text-[12px]">{doc.file.sourceUrl.replace(/\?utm_.*$/, '')}</a>
+                    </>
+                  )}
                 </span>
               ) : (
                 'None'
@@ -654,6 +809,7 @@ function DocViewer({ id, onClose, onUpload }) {
             <DocActions doc={doc} lang="id" />
             <div className="flex flex-wrap gap-2">
               <Button size="sm" variant="outline" onClick={onUpload}><Upload size={14} /> {doc.file ? 'Replace file' : 'Upload file'}</Button>
+              {onImport && <Button size="sm" variant="outline" onClick={onImport}><Globe size={14} /> Import from URL</Button>}
               {doc.file &&
                 (confirmRm ? (
                   <ConfirmInline
@@ -687,7 +843,7 @@ function DocViewer({ id, onClose, onUpload }) {
                 {loadErr ? `Could not load the file: ${loadErr}` : doc.file ? (isPdf ? 'Loading preview…' : 'Preview not available for this file type') : 'No document uploaded yet'}
               </div>
               <p className="text-[13px] text-muted mt-1">
-                {doc.file ? 'Use Unduh Dokumen to open it.' : 'Upload the official PDF so learners can download it from the repository.'}
+                {doc.file ? 'Use Unduh Dokumen to open it.' : REMOTE ? 'Upload the official PDF, or import it from the publisher’s website, so learners can download it from the repository.' : 'Upload the official PDF so learners can download it from the repository.'}
               </p>
               <p className="text-[13px] text-ink/80 mt-4 text-left">{doc.description}</p>
             </div>
@@ -707,7 +863,7 @@ function Meta({ k, v }) {
   );
 }
 
-function DocEditor({ doc, onClose }) {
+function DocEditor({ doc, onClose, onMessage }) {
   const { state, dispatch } = useStore();
   const isNew = !doc;
   const [f, setF] = useState(() => ({
@@ -726,6 +882,7 @@ function DocEditor({ doc, onClose }) {
     note: doc?.note || '',
   }));
   const [file, setFile] = useState(null);
+  const [importUrl, setImportUrl] = useState('');
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
@@ -739,6 +896,7 @@ function DocEditor({ doc, onClose }) {
     const yr = Number(f.year);
     if (!Number.isInteger(yr) || yr < 1900 || yr > 2100) e.year = 'Enter a 4-digit year.';
     if (file && file.size > DOC_MAX) e.file = `The file is larger than ${formatBytes(DOC_MAX)}.`;
+    if (!file && importUrl.trim() && !/^https?:\/\/\S+$/i.test(importUrl.trim())) e.importUrl = 'Enter a public link starting with https://';
     setErrors(e);
     if (Object.keys(e).length) return;
     setSaving(true);
@@ -769,6 +927,15 @@ function DocEditor({ doc, onClose }) {
     await api.saveDoc(saved);
     if (file && doc?.file?.path) await api.removeDocFile(doc);
     dispatch({ type: 'content/doc/save', doc: saved });
+    if (!file && importUrl.trim()) {
+      try {
+        const fetched = await api.importDocFile(saved, { url: importUrl.trim() });
+        dispatch({ type: 'content/doc/file', id, file: fetched });
+        onMessage?.({ tone: 'good', text: `Saved ${saved.short} and stored “${fetched.name}” (${formatBytes(fetched.size)}).` });
+      } catch (err) {
+        onMessage?.({ tone: 'bad', text: `Saved ${saved.short}, but the file could not be fetched: ${err.message} Use the globe button to try another address.` });
+      }
+    }
     setSaving(false);
     onClose();
     } catch (err) {
@@ -787,7 +954,7 @@ function DocEditor({ doc, onClose }) {
         <>
           {Object.keys(errors).length > 0 && <span className="mr-auto text-[12.5px] text-bad flex items-center gap-1.5"><AlertTriangle size={14} /> {errors._save || 'Fix the highlighted fields.'}</span>}
           <Button variant="outline" onClick={onClose}>Cancel</Button>
-          <Button onClick={save} disabled={saving}><Save size={15} /> {saving ? 'Saving…' : 'Save document'}</Button>
+          <Button onClick={save} disabled={saving}><Save size={15} /> {saving ? (importUrl.trim() && !file ? 'Saving and fetching…' : 'Saving…') : 'Save document'}</Button>
         </>
       }
     >
@@ -856,6 +1023,16 @@ function DocEditor({ doc, onClose }) {
         >
           <input id="d-file" type="file" accept={DOC_ACCEPT} className="text-[13px]" onChange={(e) => setFile(e.target.files?.[0] || null)} />
         </Field>
+        {REMOTE && (
+          <Field
+            label="…or fetch the file from a web address"
+            htmlFor="d-import"
+            error={errors.importUrl}
+            hint={file ? 'A file is selected above, so this address is ignored.' : 'Direct PDF/DOC/DOCX link or a page that links to one. The server downloads it into storage after you save.'}
+          >
+            <input id="d-import" className={inputCls} value={importUrl} onChange={(e) => setImportUrl(e.target.value)} placeholder="https://" disabled={!!file} />
+          </Field>
+        )}
       </div>
     </Modal>
   );
